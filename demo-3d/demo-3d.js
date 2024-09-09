@@ -320,16 +320,17 @@ function main() {
     swfl.state.view_r.yaw = Math.PI;
 
     const canvas = document.querySelector("#demo-canvas");
-    function fixCanvasShape() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-    fixCanvasShape();
-    window.addEventListener("resize", fixCanvasShape);
     const gl = canvas.getContext("webgl");
 
     const p = compile(gl);
     gl.useProgram(p);
+    function fixCanvasShape() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    fixCanvasShape();
+    window.addEventListener("resize", fixCanvasShape);
 
     let array = new Float32Array([-1,  3, -1, -1, 3, -1]);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
