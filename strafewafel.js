@@ -135,6 +135,7 @@ function Strafewafel() {
                 pressed: { }
             },
             screen: {
+                pointerLocked: false,
                 pressed: { }
             }
         }
@@ -281,6 +282,17 @@ function Strafewafel() {
         state.inputs.screen.pressed = {};
     }
 
+    function handlePointerLockChange() {
+        const el = this;
+        if (document.pointerLockElement) {
+            console.log("The pointer lock status is now locked");
+            state.inputs.screen.pointerLocked = true;
+        } else {
+            console.log("The pointer lock status is now unlocked");
+            state.inputs.screen.pointerLocked = false;
+        }
+    }
+
     function addDefaultEventListeners(el) {
         el.addEventListener("keydown", (ev) => {
             keyDown(ev.key);
@@ -295,6 +307,15 @@ function Strafewafel() {
         el.addEventListener("touchmove", pressMove);
         el.addEventListener("touchend", pressUp);
         el.addEventListener("touchcancel", pressUp);
+        // try to get mouse look too on desktop
+        document.addEventListener("pointerlockchange", handlePointerLockChange);
+        el.addEventListener("click", () => { 
+            if (!document.pointerLockElement && el.requestPointerLock)
+            {
+                console.log("requesting pointer lock", document.pointerLockElement);
+                el.requestPointerLock();
+            }
+        });
     }
 
     function getControlParent(el)
@@ -364,6 +385,19 @@ function Strafewafel() {
                 state.inputs.screen.pressed[id].position = { ctrlX, ctrlY };
                 state.inputs.total++;
             }
+        }
+        // if we have pointer lock, we should also add events for that
+        if (state.inputs.screen.pointerLocked)
+        {
+            const rect = this.getBoundingClientRect();
+            const ctrlY = -ev.movementX / 5;
+            const ctrlX = -ev.movementY / 5;
+            console.log(`got pointerlocked control ${ctrlX} ${ctrlY}`)
+            const action = "look";
+            state.inputs.screen.pressed["pointerlock"] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action };
+            state.inputs.total++;
+        } else {
+            delete state.inputs.screen.pressed["pointerlock"];
         }
     }
 

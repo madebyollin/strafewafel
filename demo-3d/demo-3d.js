@@ -241,7 +241,7 @@ vec3 computeRayDirection(float ndcX, float ndcY, float aspectRatio, float fov) {
 
 void main() {
     vec2 st = gl_FragCoord.xy;
-    vec3 rayDirection = computeRayDirection(2.0 * st.x/width - 1.0, 2.0 * st.y / height - 1.0, width/height, 60.0);
+    vec3 rayDirection = computeRayDirection(2.0 * st.x/width - 1.0, 2.0 * st.y / height - 1.0, width/height, 75.0);
     // rotate by pitch
     rayDirection = vec3(
         rayDirection.x * cos(pitch)  - rayDirection.z * sin(pitch),
