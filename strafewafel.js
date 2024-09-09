@@ -98,6 +98,9 @@ function Strafewafel() {
         maxAngularVelocityPY_rps: 2.0,
         lookSpeed_rps: 2.0,
 
+        // what's the rate at which pointer locked mouse movement changes the view?
+        pointerLockedRadiansPerPixel: 1.0 / 512.0,
+
         // what's the min / max xy acceleration we'll allow?
         maxAngularAccelerationPY_rps2: 30,
 
@@ -404,8 +407,8 @@ function Strafewafel() {
             {
                 const prevTimestamp_ms = state.inputs.screen.pressed["pointerlock"].timestamp_ms;
                 const deltaT_s = (timestamp_ms - prevTimestamp_ms) / 1000.0;
-                ctrlY = -ev.movementX / deltaT_s / this.clientWidth * config.lookSpeed_rps;
-                ctrlX = -ev.movementY / deltaT_s / this.clientHeight * config.lookSpeed_rps;
+                ctrlY = -ev.movementX / deltaT_s * config.pointerLockedRadiansPerPixel;
+                ctrlX = -ev.movementY / deltaT_s * config.pointerLockedRadiansPerPixel;
             }
 
             const action = "look";
