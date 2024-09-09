@@ -159,8 +159,8 @@ function Strafewafel() {
         for (const k in inputs.pressed) {
             if (inputs.pressed[k].index >= activeIndex && inputs.pressed[k].action == action)
             {
-                if (inputs.pressed[k].timestamp_ms && (now_ms - inputs.pressed[k].timestamp_ms) / 1000.0 > config.maxDeltaT_s) {
-                    // for e.g. mouse look movement events, events will get stuck as "move" with no mouseup,
+                if (k == "pointerlock" && inputs.pressed[k].timestamp_ms && (now_ms - inputs.pressed[k].timestamp_ms) / 1000.0 > config.maxDeltaT_s) {
+                    // for pointer lock movement events, events will get stuck as "move" with no mouseup,
                     // which would leave the view spinning indefinitely.
                     // ignore those events based on a dedicated timestamp staleness check.
                     continue;
