@@ -153,10 +153,18 @@ function Strafewafel() {
     function findActiveKey(inputs, action) {
         let activeIndex = 0;
         let activeKey = null;
+        // TODO: this should be a parameter not a secret internal state, fix
+        let now_ms = Date.now();
         // find the key with the highest index
         for (const k in inputs.pressed) {
             if (inputs.pressed[k].index >= activeIndex && inputs.pressed[k].action == action)
             {
+                if (inputs.pressed[k].timestamp_ms && (now_ms - inputs.pressed[k].timestamp_ms) / 1000.0 > config.maxDeltaT_s) {
+                    // for e.g. mouse look movement events, events will get stuck as "move" with no mouseup,
+                    // which would leave the view spinning indefinitely.
+                    // ignore those events based on a dedicated timestamp staleness check.
+                    continue;
+                }
                 activeKey = k;
                 activeIndex = inputs.pressed[k].index;
             }
@@ -369,8 +377,11 @@ function Strafewafel() {
             // BEV control-system coordinates
             const ctrlY = -2 * (clickX - rect.width / 2) / rect.width;
             const ctrlX = -2 * (clickY - rect.height / 2) / rect.height;
+
+            // record timestamp so this event can be cancelled
+            const timestamp_ms = Date.now();
             
-            state.inputs.screen.pressed[id] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action };
+            state.inputs.screen.pressed[id] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms};
             state.inputs.total++;
         }
     }
