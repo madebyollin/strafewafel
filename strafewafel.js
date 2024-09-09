@@ -68,6 +68,7 @@ function StrafewafelCore() {
         };
     }
 
+    // player state
     function State() {
         return {
             position_m: {
@@ -75,10 +76,6 @@ function StrafewafelCore() {
                 y: 0,
             },
             velocity_mps: {
-                x: 0,
-                y: 0,
-            },
-            targetVelocity_mps: {
                 x: 0,
                 y: 0,
             },
@@ -90,25 +87,25 @@ function StrafewafelCore() {
                 pitch: 0,
                 yaw: 0,
             },
-            targetAngularVelocity_rps: {
-                pitch: 0,
-                yaw: 0,
-            },
-            inputs: {
-                // incrementing index of input events, to break ties
-                total: 0,
-                // dictionary of keyboard input events; key -> event
-                keyboard: {
-                    pressed: { }
-                },
-                // dictionary of onscreen input events; unique ID -> event
-                screen: {
-                    pointerLocked: false,
-                    pressed: { }
-                }
-            },
-        }
+        };
     };
+
+    // UI state
+    function UIState() {
+        return {
+            // incrementing index of input events, to break ties
+            total: 0,
+            // dictionary of keyboard input events; key -> event
+            keyboard: {
+                pressed: { }
+            },
+            // dictionary of onscreen input events; unique ID -> event
+            screen: {
+                pointerLocked: false,
+                pressed: { }
+            }
+        };
+    }
 
     function UI() {
         const SWFL_CSS = `
@@ -160,7 +157,8 @@ function StrafewafelCore() {
         };
     };
 
-    function renderStateToUI(state, config, ui) {
+    function renderStateToUI(_state, _config, _uiState, ui) {
+        const [state, config, uiState] = [_state, _config, _uiState]; // no touchy
         const canonicalVelocity_mps = util.applyYaw(state.velocity_mps, -state.view_r.yaw);
         const maxShift = 0.25;
         ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
@@ -169,7 +167,7 @@ function StrafewafelCore() {
         ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.angularVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
         ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.angularVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
 
-        if (state.inputs.screen.pointerLocked)
+        if (uiState.screen.pointerLocked)
         {
             ui.leftControlEl.classList.add("locked");
             ui.rightControlEl.classList.add("locked");
@@ -179,32 +177,10 @@ function StrafewafelCore() {
         }
     }
 
-    return {
-        util,
-        State,
-        Config,
-        UI,
-        renderStateToUI
-    };
-}
-
-// imperative containment zone.
-// config stuff goes in config, state goes in state
-function Strafewafel() {
-    const core = StrafewafelCore();
-    const ui = core.UI();
-    const util = core.util;
-    const config = core.Config();
-    const state = core.State();
-
-    ui.leftControlEl.addEventListener("mousedown", pressDown);
-    ui.leftControlEl.addEventListener("touchstart", pressDown);
-
-    ui.rightControlEl.addEventListener("mousedown", pressDown);
-    ui.rightControlEl.addEventListener("touchstart", pressDown);
-
+    // this function searches the UI State and finds the relevant input
     // also TODO: seems like a lot of people probably want diagonal motion in multikey instead of the most-recent-key thing we use for 2d?
-    function findActiveKey(inputs, action) {
+    function findActiveInputAction(_inputs, _config, _action) {
+        const [inputs, config, action] = [_inputs, _config, _action]; // no touchy
         let activeIndex = 0;
         let activeKey = null;
         // TODO: this should be a parameter not a secret internal state, fix
@@ -226,77 +202,50 @@ function Strafewafel() {
         return activeKey;
     }
 
-    function step(dt_s) {
+
+    function stepPlayerState(_state, _config, _uiState, dt_s) {
+        const [state, config, uiState] = [_state, _config, _uiState]; // no touchy
+
         dt_s = Math.min(dt_s, config.maxDeltaT_s);
-        let targetSpeed_mps = 0.0;
-        const activePositionKey = findActiveKey(state.inputs.keyboard, "move");
-        if (activePositionKey)
-        {
-            targetSpeed_mps = state.inputs.keyboard.pressed[activePositionKey].shift ? config.runSpeed_mps : config.walkSpeed_mps;
-        }
 
-        state.targetVelocity_mps = { x: 0.0, y: 0.0 };
-        if (activePositionKey == "w") { state.targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
-        if (activePositionKey == "a") { state.targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, state.view_r.yaw); }
-        if (activePositionKey == "s") { state.targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
-        if (activePositionKey == "d") { state.targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, state.view_r.yaw); }
-
-        // check for touch override of the keyboard
-        const activeScreenPositionKey = findActiveKey(state.inputs.screen, "move");
-        if (activeScreenPositionKey &&
-            (!activePositionKey || state.inputs.screen.pressed[activeScreenPositionKey].index > state.inputs.keyboard.pressed[activePositionKey].index))
-        {
-            const press = state.inputs.screen.pressed[activeScreenPositionKey];
-            state.targetVelocity_mps = util.applyYaw({x: press.position.ctrlX * config.runSpeed_mps, y: press.position.ctrlY * config.runSpeed_mps}, state.view_r.yaw);
-        }
-
-        const acceleration_mps2 = { 
-            x: util.clamp((state.targetVelocity_mps.x - state.velocity_mps.x) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
-            y: util.clamp((state.targetVelocity_mps.y - state.velocity_mps.y) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
-        };
-        if (activePositionKey == null) {
-            acceleration_mps2.x *= 0.5;
-            acceleration_mps2.y *= 0.5;
-        }
-
-        state.velocity_mps.x = util.clamp(util.snapToZero(state.velocity_mps.x + acceleration_mps2.x * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps);
-        state.velocity_mps.y = util.clamp(util.snapToZero(state.velocity_mps.y + acceleration_mps2.y * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps);
-
-        state.position_m.x += state.velocity_mps.x * dt_s;
-        state.position_m.y += state.velocity_mps.y * dt_s;
-
-        // view angle
-        const activeViewKey = findActiveKey(state.inputs.keyboard, "look");
+        // ---------------------------------------------------------------------
+        // Update looking state. Do this first because the looking state affects
+        // the coordinate frame for movement controls
+        // ---------------------------------------------------------------------
+        const activeViewKey = findActiveInputAction(uiState.keyboard, config, "look");
         let targetSpeed_rps = 0.0;
         if (activeViewKey) {
             targetSpeed_rps = config.lookSpeed_rps;
         }
-        state.targetAngularVelocity_rps = { pitch: 0.0, yaw: 0.0 };
-        if (activeViewKey == "i") { state.targetAngularVelocity_rps = {pitch: targetSpeed_rps, yaw: 0.0}; }
-        if (activeViewKey == "j") { state.targetAngularVelocity_rps = {pitch: 0.0, yaw: targetSpeed_rps}; }
-        if (activeViewKey == "k") { state.targetAngularVelocity_rps = {pitch: -targetSpeed_rps, yaw: 0.0}; }
-        if (activeViewKey == "l") { state.targetAngularVelocity_rps = {pitch: 0.0, yaw: -targetSpeed_rps}; }
+        let targetAngularVelocity_rps = { pitch: 0.0, yaw: 0.0 };
+        if (activeViewKey == "i") { targetAngularVelocity_rps = {pitch: targetSpeed_rps, yaw: 0.0}; }
+        if (activeViewKey == "j") { targetAngularVelocity_rps = {pitch: 0.0, yaw: targetSpeed_rps}; }
+        if (activeViewKey == "k") { targetAngularVelocity_rps = {pitch: -targetSpeed_rps, yaw: 0.0}; }
+        if (activeViewKey == "l") { targetAngularVelocity_rps = {pitch: 0.0, yaw: -targetSpeed_rps}; }
 
         // check for touch override of the keyboard
-        const activeScreenViewKey = findActiveKey(state.inputs.screen, "look");
-        if (state.inputs.screen.pressed[activeScreenViewKey] &&
-            (!activeViewKey || state.inputs.screen.pressed[activeScreenViewKey].index > state.inputs.keyboard.pressed[activeViewKey].index))
+        const activeScreenViewKey = findActiveInputAction(uiState.screen, config, "look");
+        if (uiState.screen.pressed[activeScreenViewKey] &&
+            (!activeViewKey || uiState.screen.pressed[activeScreenViewKey].index > uiState.keyboard.pressed[activeViewKey].index))
         {
-            const press = state.inputs.screen.pressed[activeScreenViewKey];
-            state.targetAngularVelocity_rps = {pitch: press.position.ctrlX * config.lookSpeed_rps, yaw: press.position.ctrlY * config.lookSpeed_rps};
+            const press = uiState.screen.pressed[activeScreenViewKey];
+            targetAngularVelocity_rps = {
+                pitch: press.position.ctrlX * config.lookSpeed_rps,
+                yaw: press.position.ctrlY * config.lookSpeed_rps
+            };
         }
 
         // slow movement when pitch is about to hit limits
         // TODO: either make the limit symmetric or make this clamp properly
         const pitchSoftLimiter = 1.0 - util.clamp(5 * Math.abs(state.view_r.pitch) / config.maxPitch_r - 4, 0.0, 1.0);
-        if (Math.sign(state.targetAngularVelocity_rps.pitch) == Math.sign(state.view_r.pitch))
+        if (Math.sign(targetAngularVelocity_rps.pitch) == Math.sign(state.view_r.pitch))
         {
-            state.targetAngularVelocity_rps.pitch *= pitchSoftLimiter;
+            targetAngularVelocity_rps.pitch *= pitchSoftLimiter;
         }
 
         const angularAcceleration_rps2 = { 
-            pitch: util.clamp((state.targetAngularVelocity_rps.pitch - state.angularVelocity_rps.pitch) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
-            yaw: util.clamp((state.targetAngularVelocity_rps.yaw - state.angularVelocity_rps.yaw) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
+            pitch: util.clamp((targetAngularVelocity_rps.pitch - state.angularVelocity_rps.pitch) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
+            yaw: util.clamp((targetAngularVelocity_rps.yaw - state.angularVelocity_rps.yaw) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
         };
 
         // additional cooldown so that things come smoothly to rest when you let go of the key
@@ -305,55 +254,155 @@ function Strafewafel() {
             angularAcceleration_rps2.yaw *= config.yawCooldownFactor;
         }
 
-        state.angularVelocity_rps.pitch = util.clamp(util.snapToZero(state.angularVelocity_rps.pitch + angularAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps);
-        state.angularVelocity_rps.yaw = util.clamp(util.snapToZero(state.angularVelocity_rps.yaw + angularAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps);
+        // smoothed and clamped version
+        const angularVelocity_rps = {
+            pitch: util.clamp(util.snapToZero(state.angularVelocity_rps.pitch + angularAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
+            yaw: util.clamp(util.snapToZero(state.angularVelocity_rps.yaw + angularAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
+        };
 
         if (activeScreenViewKey == "pointerlock")
         {
             // direct override no smoothing
-            state.angularVelocity_rps = state.targetAngularVelocity_rps;
+            angularVelocity_rps.pitch = targetAngularVelocity_rps.pitch;
+            angularVelocity_rps.yaw = targetAngularVelocity_rps.yaw;
         }
 
-        state.view_r.pitch += state.angularVelocity_rps.pitch * dt_s;
-        state.view_r.pitch = util.clamp(state.view_r.pitch, -config.maxPitch_r, config.maxPitch_r);
-        state.view_r.yaw += state.angularVelocity_rps.yaw * dt_s;
+        const view_r = {
+            pitch: util.clamp(state.view_r.pitch + state.angularVelocity_rps.pitch * dt_s, -config.maxPitch_r, config.maxPitch_r),
+            yaw: state.view_r.yaw + state.angularVelocity_rps.yaw * dt_s
+        };
+
+        // ---------------------------------------------------------------------
+        // Update movement state. Do this second because the looking state affects
+        // the coordinate frame for movement controls.
+        // ---------------------------------------------------------------------
+        let targetSpeed_mps = 0.0;
+        const activePositionKey = findActiveInputAction(uiState.keyboard, config, "move");
+        if (activePositionKey)
+        {
+            targetSpeed_mps = uiState.keyboard.pressed[activePositionKey].shift ? config.runSpeed_mps : config.walkSpeed_mps;
+        }
+
+        let targetVelocity_mps = { x: 0.0, y: 0.0 };
+        if (activePositionKey == "w") { targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, view_r.yaw); }
+        if (activePositionKey == "a") { targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, view_r.yaw); }
+        if (activePositionKey == "s") { targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, view_r.yaw); }
+        if (activePositionKey == "d") { targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, view_r.yaw); }
+
+        // check for touch override of the keyboard
+        const activeScreenPositionKey = findActiveInputAction(uiState.screen, config, "move");
+        if (activeScreenPositionKey &&
+            (!activePositionKey || uiState.screen.pressed[activeScreenPositionKey].index > uiState.keyboard.pressed[activePositionKey].index))
+        {
+            const press = uiState.screen.pressed[activeScreenPositionKey];
+            targetVelocity_mps = util.applyYaw({x: press.position.ctrlX * config.runSpeed_mps, y: press.position.ctrlY * config.runSpeed_mps}, view_r.yaw);
+        }
+
+        const acceleration_mps2 = { 
+            x: util.clamp((targetVelocity_mps.x - state.velocity_mps.x) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
+            y: util.clamp((targetVelocity_mps.y - state.velocity_mps.y) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
+        };
+
+        // additional cooldown so that things come smoothly to rest when you let go of the key
+        if (activePositionKey == null) {
+            acceleration_mps2.x *= 0.5;
+            acceleration_mps2.y *= 0.5;
+        }
+
+        // the snap to zero here is kinda janky, it was needed to prevent weird floating point fluctuations when converging to stop
+        const velocity_mps = {
+            x: util.clamp(util.snapToZero(state.velocity_mps.x + acceleration_mps2.x * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps),
+            y: util.clamp(util.snapToZero(state.velocity_mps.y + acceleration_mps2.y * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps)
+        };
+
+        const position_m = {
+            x: state.position_m.x + velocity_mps.x * dt_s,
+            y: state.position_m.y + velocity_mps.y * dt_s,
+        };
+
+        const outState = {
+            position_m,
+            velocity_mps,
+            view_r,
+            angularVelocity_rps,
+        };
+        // TODO: this is a cursed idiom
+        console.assert(JSON.stringify(Object.keys(state).sort()) == JSON.stringify(Object.keys(outState).sort()));
+        return outState;
+    }
+
+    return {
+        util,
+        State,
+        Config,
+        UI,
+        UIState,
+        renderStateToUI,
+        stepPlayerState,
+        findActiveInputAction
+    };
+}
+
+// imperative containment zone.
+// config stuff goes in config, state goes in state
+function Strafewafel() {
+    const core = StrafewafelCore();
+    const ui = core.UI();
+    const util = core.util;
+    const config = core.Config();
+    const uiState = core.UIState();
+
+    let state = core.State();
+
+    ui.leftControlEl.addEventListener("mousedown", pressDown);
+    ui.leftControlEl.addEventListener("touchstart", pressDown);
+
+    ui.rightControlEl.addEventListener("mousedown", pressDown);
+    ui.rightControlEl.addEventListener("touchstart", pressDown);
+
+    function step(dt_s) {
+        // inplace update
+        Object.assign(
+            state,
+            core.stepPlayerState(state, config, uiState, dt_s)
+        );
     }
 
     function keyDown(key) {
         // need to keep these sorted by order to have nice multi-key support
-        let activeKey = findActiveKey(state.inputs.keyboard, "move");
+        let activeKey = core.findActiveInputAction(uiState.keyboard, "move");
         if (key == "Shift" && activeKey) {
-            state.inputs.keyboard.pressed[activeKey].shift = true;
+            uiState.keyboard.pressed[activeKey].shift = true;
         } else {
             let action = null;
             if (["w", "a", "s", "d"].includes(key.toLowerCase())) action = "move";
             if (["i", "j", "k", "l"].includes(key.toLowerCase())) action = "look";
-            state.inputs.keyboard.pressed[key.toLowerCase()] = { index: state.inputs.total, shift: key == key.toUpperCase(), action };
-            state.inputs.total++;
+            uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: key == key.toUpperCase(), action };
+            uiState.total++;
         }
     }
 
     function keyUp(key) {
-        let activeKey = findActiveKey(state.inputs.keyboard, "move");
+        let activeKey = core.findActiveInputAction(uiState.keyboard, "move");
         if (key == "Shift" && activeKey) {
-            state.inputs.keyboard.pressed[activeKey].shift = false;
+            uiState.keyboard.pressed[activeKey].shift = false;
         } else {
-            delete state.inputs.keyboard.pressed[key.toLowerCase()];
+            delete uiState.keyboard.pressed[key.toLowerCase()];
         }
     }
 
     function resetInputs() {
-        state.inputs.keyboard.pressed = {};
-        state.inputs.screen.pressed = {};
+        uiState.keyboard.pressed = {};
+        uiState.screen.pressed = {};
     }
 
     function handlePointerLockChange() {
         const el = this;
         if (document.pointerLockElement) {
-            state.inputs.screen.pointerLocked = true;
+            uiState.screen.pointerLocked = true;
         } else {
-            state.inputs.screen.pointerLocked = false;
-            delete state.inputs.screen.pressed["pointerlock"];
+            uiState.screen.pointerLocked = false;
+            delete uiState.screen.pressed["pointerlock"];
         }
     }
 
@@ -377,7 +426,7 @@ function Strafewafel() {
             if (getControlParent(ev.target)) {
                 return;
             } else {
-                console.log("allowing pointer lock since", state.inputs.screen.pressed, ev);
+                console.log("allowing pointer lock since", uiState.screen.pressed, ev);
             }
             if (!document.pointerLockElement && el.requestPointerLock)
             {
@@ -425,8 +474,8 @@ function Strafewafel() {
             // record timestamp so this event can be cancelled
             const timestamp_ms = Date.now();
             
-            state.inputs.screen.pressed[id] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms};
-            state.inputs.total++;
+            uiState.screen.pressed[id] = { index: uiState.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms};
+            uiState.total++;
         }
     }
 
@@ -435,9 +484,9 @@ function Strafewafel() {
         let touches = ev.changedTouches || [ev];
         for (let touch of touches){
             let id = touch.identifier ? touch.identifier : "mouse";
-            if (state.inputs.screen.pressed[id]) {
+            if (uiState.screen.pressed[id]) {
                 ev.preventDefault();
-                const rect = state.inputs.screen.pressed[id].rect;
+                const rect = uiState.screen.pressed[id].rect;
           
                 // Calculate element center
                 const centerX = rect.left + rect.width / 2;
@@ -452,20 +501,20 @@ function Strafewafel() {
                 const ctrlY = -2 * (clickX - rect.width / 2) / rect.width;
                 const ctrlX = -2 * (clickY - rect.height / 2) / rect.height;
                 
-                state.inputs.screen.pressed[id].index = state.inputs.total;
-                state.inputs.screen.pressed[id].position = { ctrlX, ctrlY };
-                state.inputs.total++;
+                uiState.screen.pressed[id].index = uiState.total;
+                uiState.screen.pressed[id].position = { ctrlX, ctrlY };
+                uiState.total++;
             }
         }
         // if we have pointer lock, we should also add events for that
-        if (state.inputs.screen.pointerLocked)
+        if (uiState.screen.pointerLocked)
         {
             let ctrlY = 0.0;
             let ctrlX = 0.0;
             const timestamp_ms = Date.now(); // ms
-            if (state.inputs.screen.pressed["pointerlock"])
+            if (uiState.screen.pressed["pointerlock"])
             {
-                const prevTimestamp_ms = state.inputs.screen.pressed["pointerlock"].timestamp_ms;
+                const prevTimestamp_ms = uiState.screen.pressed["pointerlock"].timestamp_ms;
                 const deltaT_s = (timestamp_ms - prevTimestamp_ms) / 1000.0;
                 ctrlY = -ev.movementX / deltaT_s * config.pointerLockedRadiansPerPixel;
                 ctrlX = -ev.movementY / deltaT_s * config.pointerLockedRadiansPerPixel;
@@ -473,10 +522,10 @@ function Strafewafel() {
 
             const action = "look";
             const rect = this.getBoundingClientRect();
-            state.inputs.screen.pressed["pointerlock"] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms };
-            state.inputs.total++;
+            uiState.screen.pressed["pointerlock"] = { index: uiState.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms };
+            uiState.total++;
         } else {
-            delete state.inputs.screen.pressed["pointerlock"];
+            delete uiState.screen.pressed["pointerlock"];
         }
     }
 
@@ -486,7 +535,7 @@ function Strafewafel() {
         let touches = ev.changedTouches || [ev];
         for (let touch of touches) {
             let id = touch.identifier ? touch.identifier : "mouse";
-            delete state.inputs.screen.pressed[id];
+            delete uiState.screen.pressed[id];
         }
     }
 
@@ -497,7 +546,7 @@ function Strafewafel() {
     }
 
     function updateControlElements() {
-        core.renderStateToUI(state, config, ui);
+        core.renderStateToUI(state, config, uiState, ui);
     }
 
     // public API
