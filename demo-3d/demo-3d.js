@@ -255,7 +255,7 @@ void main() {
         rayDirection.z
     );
     vec3 rgbAverage = vec3(0.0, 0.0, 0.0);
-    const int nSamples = 10;
+    const int nSamples = 5;
     const int nBounces = 3;
     vec3 rng = rand(vec3(st, u_time));
     for (int t = 0; t < nSamples; t++)
