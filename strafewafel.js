@@ -321,7 +321,12 @@ function Strafewafel() {
         el.addEventListener("touchcancel", pressUp);
         // try to get mouse look too on desktop
         document.addEventListener("pointerlockchange", handlePointerLockChange);
-        el.addEventListener("click", () => { 
+        el.addEventListener("mousedown", (ev) => {
+            if (getControlParent(ev.target)) {
+                return;
+            } else {
+                console.log("allowing pointer lock since", state.inputs.screen.pressed, ev);
+            }
             if (!document.pointerLockElement && el.requestPointerLock)
             {
                 el.requestPointerLock();
@@ -345,7 +350,7 @@ function Strafewafel() {
         let action = null;
         let touches = ev.changedTouches || [ev];
         for (let touch of touches){
-            let id = touch.identifier ? touch.identifier : 0;
+            let id = touch.identifier ? touch.identifier : "mouse";
             let target = touch.target ? getControlParent(touch.target) : this;
             if (target.classList.contains("swfl-leftControl")) action = "move";
             if (target.classList.contains("swfl-rightControl")) action = "look";
@@ -374,7 +379,7 @@ function Strafewafel() {
     {
         let touches = ev.changedTouches || [ev];
         for (let touch of touches){
-            let id = touch.identifier ? touch.identifier : 0;
+            let id = touch.identifier ? touch.identifier : "mouse";
             if (state.inputs.screen.pressed[id]) {
                 ev.preventDefault();
                 const rect = state.inputs.screen.pressed[id].rect;
@@ -425,7 +430,7 @@ function Strafewafel() {
     {
         let touches = ev.changedTouches || [ev];
         for (let touch of touches) {
-            let id = touch.identifier ? touch.identifier : 0;
+            let id = touch.identifier ? touch.identifier : "mouse";
             delete state.inputs.screen.pressed[id];
         }
     }
