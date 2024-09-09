@@ -8,10 +8,10 @@
 //
 // Inputs and outputs:
 //
-//   Stroopwafel consumes keyboard / touch events.
+//   Strafewafel consumes keyboard / touch events.
 //     You can bind these with swfl.addDefaultEventListeners(document.body);
-//   Stroopwafel updates its internal state whenever you call swfl.step(timestamp);
-//   Stroopwafel's output state is a position / orientation along with derivatives thereof.
+//   Strafewafel updates its internal state whenever you call swfl.step(dt_s);
+//   Strafewafel's output state is a position / orientation along with derivatives thereof.
 //     You can access these at swfl.state.
 //
 //
@@ -24,131 +24,185 @@
 //   Blender walk-mode controls: https://github.com/blender/blender/blob/2ddc574ad96607bc82960d66445a6bb5b4363874/source/blender/editors/space_view3d/view3d_navigate_walk.cc
 //   Quake cl_input.c: https://github.com/id-Software/Quake-III-Arena/blob/master/code/client/cl_input.c
 
-function Strafewafel() {
-    const SWFL_CSS = `
-        .swfl-control {
-            position: absolute;
-            bottom: 0px;
-            width: clamp(25vh, 192px, 256px);
-            height: clamp(25vh, 192px, 256px);
-            border-radius:15vw;
-            display: block;
-            cursor: grab;
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            transition: 0.2s ease opacity;
-        }
-        .swfl-control.locked {
-            opacity:0.0;
-        }
-        .swfl-controlSocket {
-            position: absolute;
-            left: 25%;
-            top: 25%;
-            background: rgba(64 64 64 / 0.5);
-            -webkit-backdrop-filter: blur(16px) saturate(200%);
-            width:50%;
-            height:50%;
-            border-radius:50%;
-            display: block;
-        }
-        .swfl-controlStick {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translateX(-50%) translateY(-50%);
-            background: rgba(255,255,255,0.5);
-            -webkit-backdrop-filter: blur(8px) saturate(200%);
-            width:75%;
-            height:75%;
-            border-radius:75%;
-            display: block;
-        }
-        .swfl-leftControl {
-            left: 0;
-        }
-        .swfl-rightControl {
-            right: 0;
-        }
-    `;
+// functional paradise, no external state here
+function StrafewafelCore() {
     const util = {
         clamp: (x, a, b) => Math.min(b, Math.max(a, x)),
-        snapToZero: (x, eps) => (Math.abs(x) > eps ? x : 0)
-    }
-
-    const config = {
-        // what's the min / max xy velocity we'll allow?
-        maxMoveSpeed_mps: 7,
-        runSpeed_mps: 7,
-        walkSpeed_mps: 3.5,
-
-        // what's the min / max xy acceleration we'll allow?
-        maxAccelerationXY_mps2: 75,
-
-        // how rapid is the cooldown when you let go of the keys?
-        pitchCooldownFactor: 0.75,
-        yawCooldownFactor: 0.5,
-
-        // max pitch before you can't look up / down anymore
-        maxPitch_r: 1.5,
-
-        // what's the min / max xy velocity we'll allow?
-        maxAngularVelocityPY_rps: 2.0,
-        lookSpeed_rps: 2.0,
-
-        // what's the rate at which pointer locked mouse movement changes the view?
-        pointerLockedRadiansPerPixel: 1.0 / 512.0,
-
-        // what's the min / max xy acceleration we'll allow?
-        maxAngularAccelerationPY_rps2: 30,
-
-        // max delta t we'll allow before slowing time down
-        maxDeltaT_s: 0.05,
-
-        // tiny number
-        eps: 1e-5
+        snapToZero: (x, eps) => (Math.abs(x) > eps ? x : 0),
+        // rotate a canonical 2d vector to a yawed vector
+        applyYaw: (xy, yaw) => { return {x: xy.x * Math.cos(yaw) - xy.y * Math.sin(yaw), y: xy.x * Math.sin(yaw) + xy.y * Math.cos(yaw) }; }
     };
 
-    const state = {
-        position_m: {
-            x: 0,
-            y: 0,
-        },
-        velocity_mps: {
-            x: 0,
-            y: 0,
-        },
-        targetVelocity_mps: {
-            x: 0,
-            y: 0,
-        },
-        view_r: {
-            pitch: 0,
-            yaw: 0,
-        },
-        angularVelocity_rps: {
-            pitch: 0,
-            yaw: 0,
-        },
-        targetAngularVelocity_rps: {
-            pitch: 0,
-            yaw: 0,
-        },
-        inputs: {
-            total: 0,
-            keyboard: {
-                pressed: { }
+    function Config() {
+        return {
+            // what's the min / max xy velocity we'll allow?
+            maxMoveSpeed_mps: 7,
+            runSpeed_mps: 7,
+            walkSpeed_mps: 3.5,
+
+            // what's the min / max xy acceleration we'll allow?
+            maxAccelerationXY_mps2: 75,
+
+            // how rapid is the cooldown when you let go of the keys?
+            pitchCooldownFactor: 0.75,
+            yawCooldownFactor: 0.5,
+
+            // max pitch before you can't look up / down anymore
+            maxPitch_r: 1.5,
+
+            // what's the min / max xy velocity we'll allow?
+            maxAngularVelocityPY_rps: 2.0,
+            lookSpeed_rps: 2.0,
+
+            // what's the rate at which pointer locked mouse movement changes the view?
+            pointerLockedRadiansPerPixel: 1.0 / 512.0,
+
+            // what's the min / max xy acceleration we'll allow?
+            maxAngularAccelerationPY_rps2: 30,
+
+            // max delta t we'll allow before slowing time down
+            maxDeltaT_s: 0.05,
+
+            // tiny number
+            eps: 1e-5
+        };
+    }
+
+    function State() {
+        return {
+            position_m: {
+                x: 0,
+                y: 0,
             },
-            screen: {
-                pointerLocked: false,
-                pressed: { }
-            }
+            velocity_mps: {
+                x: 0,
+                y: 0,
+            },
+            targetVelocity_mps: {
+                x: 0,
+                y: 0,
+            },
+            view_r: {
+                pitch: 0,
+                yaw: 0,
+            },
+            angularVelocity_rps: {
+                pitch: 0,
+                yaw: 0,
+            },
+            targetAngularVelocity_rps: {
+                pitch: 0,
+                yaw: 0,
+            },
+            inputs: {
+                // incrementing index of input events, to break ties
+                total: 0,
+                // dictionary of keyboard input events; key -> event
+                keyboard: {
+                    pressed: { }
+                },
+                // dictionary of onscreen input events; unique ID -> event
+                screen: {
+                    pointerLocked: false,
+                    pressed: { }
+                }
+            },
         }
     };
 
-    // TODO: combine these poor things
+    function UI() {
+        const SWFL_CSS = `
+            .swfl-control {
+                position: absolute; bottom: 0px; width: clamp(25vh, 192px, 256px); height: clamp(25vh, 192px, 256px);
+                cursor: grab; touch-action: manipulation; user-select: none; -webkit-touch-callout: none; -webkit-user-select: none;
+                border-radius: 15vw; transition: 0.2s ease opacity;
+            }
+            .swfl-control.locked { opacity:0.0; }
+            .swfl-controlSocket {
+                position: absolute; left: 25%; top: 25%; width:50%; height:50%;
+                background: rgba(64 64 64 / 0.5); -webkit-backdrop-filter: blur(16px) saturate(200%); border-radius:50%;
+            }
+            .swfl-controlStick {
+                position: absolute; left: 50%; top: 50%; width:75%; height:75%; transform: translateX(-50%) translateY(-50%);
+                background: rgba(255,255,255,0.5); -webkit-backdrop-filter: blur(8px) saturate(200%); border-radius:75%;
+            }
+            .swfl-leftControl { left: 0; }
+            .swfl-rightControl { right: 0; }
+        `;
+        // style element
+        const styleEl = document.createElement("style");
+        styleEl.type = "text/css";
+        styleEl.textContent = SWFL_CSS;
+
+        // control elements
+        const leftControlEl = document.createElement("div");
+        leftControlEl.classList.add("swfl-leftControl", "swfl-control");
+        const leftControlSocket = document.createElement("div");
+        leftControlSocket.classList.add("swfl-controlSocket");
+        leftControlEl.appendChild(leftControlSocket);
+        const leftControlStick = document.createElement("div");
+        leftControlStick.classList.add("swfl-controlStick");
+        leftControlSocket.appendChild(leftControlStick);
+
+        const rightControlEl = document.createElement("div");
+        rightControlEl.classList.add("swfl-rightControl", "swfl-control");
+        const rightControlSocket = document.createElement("div");
+        rightControlSocket.classList.add("swfl-controlSocket");
+        rightControlEl.appendChild(rightControlSocket);
+        const rightControlStick = document.createElement("div");
+        rightControlStick.classList.add("swfl-controlStick");
+        rightControlSocket.appendChild(rightControlStick);
+        return {
+            styleEl,
+            leftControlEl, rightControlEl,
+            leftControlSocket, rightControlSocket,
+            leftControlStick, rightControlStick
+        };
+    };
+
+    function renderStateToUI(state, config, ui) {
+        const canonicalVelocity_mps = util.applyYaw(state.velocity_mps, -state.view_r.yaw);
+        const maxShift = 0.25;
+        ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
+
+        ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.angularVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
+        ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.angularVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+
+        if (state.inputs.screen.pointerLocked)
+        {
+            ui.leftControlEl.classList.add("locked");
+            ui.rightControlEl.classList.add("locked");
+        } else {
+            ui.leftControlEl.classList.remove("locked");
+            ui.rightControlEl.classList.remove("locked");
+        }
+    }
+
+    return {
+        util,
+        State,
+        Config,
+        UI,
+        renderStateToUI
+    };
+}
+
+// imperative containment zone.
+// config stuff goes in config, state goes in state
+function Strafewafel() {
+    const core = StrafewafelCore();
+    const ui = core.UI();
+    const util = core.util;
+    const config = core.Config();
+    const state = core.State();
+
+    ui.leftControlEl.addEventListener("mousedown", pressDown);
+    ui.leftControlEl.addEventListener("touchstart", pressDown);
+
+    ui.rightControlEl.addEventListener("mousedown", pressDown);
+    ui.rightControlEl.addEventListener("touchstart", pressDown);
+
     // also TODO: seems like a lot of people probably want diagonal motion in multikey instead of the most-recent-key thing we use for 2d?
     function findActiveKey(inputs, action) {
         let activeIndex = 0;
@@ -172,16 +226,6 @@ function Strafewafel() {
         return activeKey;
     }
 
-
-    function applyYaw(xy, yaw)
-    {
-        // rotate a canonical vector to a yawed vector
-        return {
-            x: xy.x * Math.cos(yaw) - xy.y * Math.sin(yaw),
-            y: xy.x * Math.sin(yaw) + xy.y * Math.cos(yaw),
-        };
-    }
-
     function step(dt_s) {
         dt_s = Math.min(dt_s, config.maxDeltaT_s);
         let targetSpeed_mps = 0.0;
@@ -192,10 +236,10 @@ function Strafewafel() {
         }
 
         state.targetVelocity_mps = { x: 0.0, y: 0.0 };
-        if (activePositionKey == "w") { state.targetVelocity_mps = applyYaw({x: targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
-        if (activePositionKey == "a") { state.targetVelocity_mps = applyYaw({x: 0.0, y: targetSpeed_mps}, state.view_r.yaw); }
-        if (activePositionKey == "s") { state.targetVelocity_mps = applyYaw({x: -targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
-        if (activePositionKey == "d") { state.targetVelocity_mps = applyYaw({x: 0.0, y: -targetSpeed_mps}, state.view_r.yaw); }
+        if (activePositionKey == "w") { state.targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
+        if (activePositionKey == "a") { state.targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, state.view_r.yaw); }
+        if (activePositionKey == "s") { state.targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, state.view_r.yaw); }
+        if (activePositionKey == "d") { state.targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, state.view_r.yaw); }
 
         // check for touch override of the keyboard
         const activeScreenPositionKey = findActiveKey(state.inputs.screen, "move");
@@ -203,7 +247,7 @@ function Strafewafel() {
             (!activePositionKey || state.inputs.screen.pressed[activeScreenPositionKey].index > state.inputs.keyboard.pressed[activePositionKey].index))
         {
             const press = state.inputs.screen.pressed[activeScreenPositionKey];
-            state.targetVelocity_mps = applyYaw({x: press.position.ctrlX * config.runSpeed_mps, y: press.position.ctrlY * config.runSpeed_mps}, state.view_r.yaw);
+            state.targetVelocity_mps = util.applyYaw({x: press.position.ctrlX * config.runSpeed_mps, y: press.position.ctrlY * config.runSpeed_mps}, state.view_r.yaw);
         }
 
         const acceleration_mps2 = { 
@@ -446,59 +490,14 @@ function Strafewafel() {
         }
     }
 
-    // style element
-    const styleEl = document.createElement("style");
-    styleEl.type = "text/css";
-    styleEl.textContent = SWFL_CSS;
-
-    // control elements
-    const leftControlEl = document.createElement("div");
-    leftControlEl.classList.add("swfl-leftControl", "swfl-control");
-    const leftControlSocket = document.createElement("div");
-    leftControlSocket.classList.add("swfl-controlSocket");
-    leftControlEl.appendChild(leftControlSocket);
-    const leftControlStick = document.createElement("div");
-    leftControlStick.classList.add("swfl-controlStick");
-    leftControlSocket.appendChild(leftControlStick);
-
-    leftControlEl.addEventListener("mousedown", pressDown);
-    leftControlEl.addEventListener("touchstart", pressDown);
-
-    const rightControlEl = document.createElement("div");
-    rightControlEl.classList.add("swfl-rightControl", "swfl-control");
-    const rightControlSocket = document.createElement("div");
-    rightControlSocket.classList.add("swfl-controlSocket");
-    rightControlEl.appendChild(rightControlSocket);
-    const rightControlStick = document.createElement("div");
-    rightControlStick.classList.add("swfl-controlStick");
-    rightControlSocket.appendChild(rightControlStick);
-
-    rightControlEl.addEventListener("mousedown", pressDown);
-    rightControlEl.addEventListener("touchstart", pressDown);
-
     function addDefaultControlElements(el) {
-        el.appendChild(styleEl);
-        el.appendChild(leftControlEl);
-        el.appendChild(rightControlEl);
+        el.appendChild(ui.styleEl);
+        el.appendChild(ui.leftControlEl);
+        el.appendChild(ui.rightControlEl);
     }
 
     function updateControlElements() {
-        const canonicalVelocity_mps = applyYaw(state.velocity_mps, -state.view_r.yaw);
-        const maxShift = 0.25;
-        leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
-        leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
-
-        rightControlStick.style.left = `${100 * (0.5 - maxShift * state.angularVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
-        rightControlStick.style.top = `${100 * (0.5 - maxShift * state.angularVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
-
-        if (state.inputs.screen.pointerLocked)
-        {
-            leftControlEl.classList.add("locked");
-            rightControlEl.classList.add("locked");
-        } else {
-            leftControlEl.classList.remove("locked");
-            rightControlEl.classList.remove("locked");
-        }
+        core.renderStateToUI(state, config, ui);
     }
 
     // public API
