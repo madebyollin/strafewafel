@@ -38,6 +38,10 @@ function Strafewafel() {
             user-select: none;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
+            transition: 0.2s ease opacity;
+        }
+        .swfl-control.locked {
+            opacity:0.0;
         }
         .swfl-controlSocket {
             position: absolute;
@@ -249,6 +253,12 @@ function Strafewafel() {
         state.angularVelocity_rps.pitch = util.clamp(util.snapToZero(state.angularVelocity_rps.pitch + angularAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps);
         state.angularVelocity_rps.yaw = util.clamp(util.snapToZero(state.angularVelocity_rps.yaw + angularAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps);
 
+        if (activeScreenViewKey == "pointerlock")
+        {
+            // direct override no smoothing
+            state.angularVelocity_rps = state.targetAngularVelocity_rps;
+        }
+
         state.view_r.pitch += state.angularVelocity_rps.pitch * dt_s;
         state.view_r.pitch = util.clamp(state.view_r.pitch, -config.maxPitch_r, config.maxPitch_r);
         state.view_r.yaw += state.angularVelocity_rps.yaw * dt_s;
@@ -285,11 +295,10 @@ function Strafewafel() {
     function handlePointerLockChange() {
         const el = this;
         if (document.pointerLockElement) {
-            console.log("The pointer lock status is now locked");
             state.inputs.screen.pointerLocked = true;
         } else {
-            console.log("The pointer lock status is now unlocked");
             state.inputs.screen.pointerLocked = false;
+            delete state.inputs.screen.pressed["pointerlock"];
         }
     }
 
@@ -312,7 +321,6 @@ function Strafewafel() {
         el.addEventListener("click", () => { 
             if (!document.pointerLockElement && el.requestPointerLock)
             {
-                console.log("requesting pointer lock", document.pointerLockElement);
                 el.requestPointerLock();
             }
         });
@@ -389,12 +397,20 @@ function Strafewafel() {
         // if we have pointer lock, we should also add events for that
         if (state.inputs.screen.pointerLocked)
         {
-            const rect = this.getBoundingClientRect();
-            const ctrlY = -ev.movementX / 5;
-            const ctrlX = -ev.movementY / 5;
-            console.log(`got pointerlocked control ${ctrlX} ${ctrlY}`)
+            let ctrlY = 0.0;
+            let ctrlX = 0.0;
+            const timestamp_ms = Date.now(); // ms
+            if (state.inputs.screen.pressed["pointerlock"])
+            {
+                const prevTimestamp_ms = state.inputs.screen.pressed["pointerlock"].timestamp_ms;
+                const deltaT_s = (timestamp_ms - prevTimestamp_ms) / 1000.0;
+                ctrlY = -ev.movementX / deltaT_s / this.clientWidth * config.lookSpeed_rps;
+                ctrlX = -ev.movementY / deltaT_s / this.clientHeight * config.lookSpeed_rps;
+            }
+
             const action = "look";
-            state.inputs.screen.pressed["pointerlock"] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action };
+            const rect = this.getBoundingClientRect();
+            state.inputs.screen.pressed["pointerlock"] = { index: state.inputs.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms };
             state.inputs.total++;
         } else {
             delete state.inputs.screen.pressed["pointerlock"];
@@ -455,6 +471,15 @@ function Strafewafel() {
 
         rightControlStick.style.left = `${100 * (0.5 - maxShift * state.angularVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
         rightControlStick.style.top = `${100 * (0.5 - maxShift * state.angularVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+
+        if (state.inputs.screen.pointerLocked)
+        {
+            leftControlEl.classList.add("locked");
+            rightControlEl.classList.add("locked");
+        } else {
+            leftControlEl.classList.remove("locked");
+            rightControlEl.classList.remove("locked");
+        }
     }
 
     // public API

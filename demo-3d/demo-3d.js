@@ -162,7 +162,7 @@ float traceGround(inout vec3 pos, inout vec3 ray, inout vec3 rgb, inout vec3 rng
         float gridNonEdge = (abs(clamp(sharpness * sin(2.0 * pos.x * M_PI), -1.0, 1.0))) * (abs(clamp(sharpness * sin(2.0 * pos.y * M_PI), -1.0, 1.0)));
         float gridBorder = clamp(1.0 - (abs(clamp(0.2*sharpness * sin(2.0 * pos.x * M_PI), -1.0, 1.0))) * (abs(clamp(0.2 * sharpness * sin(2.0 * pos.y * M_PI), -1.0, 1.0))), 0.0, 1.0);
         vec3 color = vec3(0.9, 0.9, 0.9) * (0.1 + 0.9 * gridNonEdge);
-        float roughness = 0.2 * (1.0 - gridBorder * gridNonEdge);
+        float roughness = 0.1 * (1.0 - gridBorder * gridNonEdge);
 
         // fake border geometry
         ray = gridBorder * gridNonEdge * -ray + (1.0 - gridBorder * gridNonEdge) * ray;
