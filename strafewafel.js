@@ -52,7 +52,7 @@ function StrafewafelCore() {
 
             // what's the min / max xy velocity we'll allow?
             maxAngularVelocityPY_rps: 2.0,
-            lookSpeed_rps: 2.0,
+            viewSpeed_rps: 2.0,
 
             // what's the rate at which pointer locked mouse movement changes the view?
             pointerLockedRadiansPerPixel: 1.0 / 512.0,
@@ -83,7 +83,7 @@ function StrafewafelCore() {
                 pitch: 0,
                 yaw: 0,
             },
-            angularVelocity_rps: {
+            viewVelocity_rps: {
                 pitch: 0,
                 yaw: 0,
             },
@@ -164,8 +164,8 @@ function StrafewafelCore() {
         ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
         ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
 
-        ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.angularVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
-        ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.angularVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+        ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
+        ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
 
         if (uiState.screen.pointerLocked)
         {
@@ -209,13 +209,13 @@ function StrafewafelCore() {
         dt_s = Math.min(dt_s, config.maxDeltaT_s);
 
         // ---------------------------------------------------------------------
-        // Update looking state. Do this first because the looking state affects
+        // Update viewing state. Do this first because the viewing state affects
         // the coordinate frame for movement controls
         // ---------------------------------------------------------------------
-        const activeViewKey = findActiveInputAction(uiState.keyboard, config, "look");
+        const activeViewKey = findActiveInputAction(uiState.keyboard, config, "view");
         let targetSpeed_rps = 0.0;
         if (activeViewKey) {
-            targetSpeed_rps = config.lookSpeed_rps;
+            targetSpeed_rps = config.viewSpeed_rps;
         }
         let targetAngularVelocity_rps = { pitch: 0.0, yaw: 0.0 };
         if (activeViewKey == "i") { targetAngularVelocity_rps = {pitch: targetSpeed_rps, yaw: 0.0}; }
@@ -224,14 +224,14 @@ function StrafewafelCore() {
         if (activeViewKey == "l") { targetAngularVelocity_rps = {pitch: 0.0, yaw: -targetSpeed_rps}; }
 
         // check for touch override of the keyboard
-        const activeScreenViewKey = findActiveInputAction(uiState.screen, config, "look");
+        const activeScreenViewKey = findActiveInputAction(uiState.screen, config, "view");
         if (uiState.screen.pressed[activeScreenViewKey] &&
             (!activeViewKey || uiState.screen.pressed[activeScreenViewKey].index > uiState.keyboard.pressed[activeViewKey].index))
         {
             const press = uiState.screen.pressed[activeScreenViewKey];
             targetAngularVelocity_rps = {
-                pitch: press.position.ctrlX * config.lookSpeed_rps,
-                yaw: press.position.ctrlY * config.lookSpeed_rps
+                pitch: press.position.ctrlX * config.viewSpeed_rps,
+                yaw: press.position.ctrlY * config.viewSpeed_rps
             };
         }
 
@@ -243,37 +243,37 @@ function StrafewafelCore() {
             targetAngularVelocity_rps.pitch *= pitchSoftLimiter;
         }
 
-        const angularAcceleration_rps2 = { 
-            pitch: util.clamp((targetAngularVelocity_rps.pitch - state.angularVelocity_rps.pitch) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
-            yaw: util.clamp((targetAngularVelocity_rps.yaw - state.angularVelocity_rps.yaw) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
+        const viewAcceleration_rps2 = {
+            pitch: util.clamp((targetAngularVelocity_rps.pitch - state.viewVelocity_rps.pitch) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
+            yaw: util.clamp((targetAngularVelocity_rps.yaw - state.viewVelocity_rps.yaw) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
         };
 
         // additional cooldown so that things come smoothly to rest when you let go of the key
         if (!activeViewKey) {
-            angularAcceleration_rps2.pitch *= config.pitchCooldownFactor;
-            angularAcceleration_rps2.yaw *= config.yawCooldownFactor;
+            viewAcceleration_rps2.pitch *= config.pitchCooldownFactor;
+            viewAcceleration_rps2.yaw *= config.yawCooldownFactor;
         }
 
         // smoothed and clamped version
-        const angularVelocity_rps = {
-            pitch: util.clamp(util.snapToZero(state.angularVelocity_rps.pitch + angularAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
-            yaw: util.clamp(util.snapToZero(state.angularVelocity_rps.yaw + angularAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
+        const viewVelocity_rps = {
+            pitch: util.clamp(util.snapToZero(state.viewVelocity_rps.pitch + viewAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
+            yaw: util.clamp(util.snapToZero(state.viewVelocity_rps.yaw + viewAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
         };
 
         if (activeScreenViewKey == "pointerlock")
         {
             // direct override no smoothing
-            angularVelocity_rps.pitch = targetAngularVelocity_rps.pitch;
-            angularVelocity_rps.yaw = targetAngularVelocity_rps.yaw;
+            viewVelocity_rps.pitch = targetAngularVelocity_rps.pitch;
+            viewVelocity_rps.yaw = targetAngularVelocity_rps.yaw;
         }
 
         const view_r = {
-            pitch: util.clamp(state.view_r.pitch + state.angularVelocity_rps.pitch * dt_s, -config.maxPitch_r, config.maxPitch_r),
-            yaw: state.view_r.yaw + state.angularVelocity_rps.yaw * dt_s
+            pitch: util.clamp(state.view_r.pitch + state.viewVelocity_rps.pitch * dt_s, -config.maxPitch_r, config.maxPitch_r),
+            yaw: state.view_r.yaw + state.viewVelocity_rps.yaw * dt_s
         };
 
         // ---------------------------------------------------------------------
-        // Update movement state. Do this second because the looking state affects
+        // Update movement state. Do this second because the viewing state affects
         // the coordinate frame for movement controls.
         // ---------------------------------------------------------------------
         let targetSpeed_mps = 0.0;
@@ -324,7 +324,7 @@ function StrafewafelCore() {
             position_m,
             velocity_mps,
             view_r,
-            angularVelocity_rps,
+            viewVelocity_rps,
         };
         // TODO: this is a cursed idiom
         console.assert(JSON.stringify(Object.keys(state).sort()) == JSON.stringify(Object.keys(outState).sort()));
@@ -370,25 +370,35 @@ function Strafewafel() {
 
     function keyDown(key) {
         // need to keep these sorted by order to have nice multi-key support
-        let activeKey = core.findActiveInputAction(uiState.keyboard, "move");
-        if (key == "Shift" && activeKey) {
-            uiState.keyboard.pressed[activeKey].shift = true;
-        } else {
-            let action = null;
-            if (["w", "a", "s", "d"].includes(key.toLowerCase())) action = "move";
-            if (["i", "j", "k", "l"].includes(key.toLowerCase())) action = "look";
-            uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: key == key.toUpperCase(), action };
-            uiState.total++;
+        if (key == "Shift") {
+            for (let key in uiState.keyboard.pressed)
+            {
+                if (!uiState.keyboard.pressed[key].shift)
+                {
+                    uiState.keyboard.pressed[key].shift = true;
+                }
+            }
         }
+        let action = null;
+        if (["w", "a", "s", "d"].includes(key.toLowerCase())) action = "move";
+        if (["i", "j", "k", "l"].includes(key.toLowerCase())) action = "view";
+        const shift = key == key.toUpperCase() || uiState.keyboard.pressed.shift;
+        uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: shift, action };
+        uiState.total++;
     }
 
     function keyUp(key) {
-        let activeKey = core.findActiveInputAction(uiState.keyboard, "move");
-        if (key == "Shift" && activeKey) {
-            uiState.keyboard.pressed[activeKey].shift = false;
-        } else {
-            delete uiState.keyboard.pressed[key.toLowerCase()];
+        if (key == "Shift" || /^[A-Z]$/.test(key)) {
+            // keyup for any shifted key means no more shifted keys
+            for (let key in uiState.keyboard.pressed)
+            {
+                if (uiState.keyboard.pressed[key].shift)
+                {
+                    uiState.keyboard.pressed[key].shift = false;
+                }
+            }
         }
+        delete uiState.keyboard.pressed[key.toLowerCase()];
     }
 
     function resetInputs() {
@@ -420,13 +430,12 @@ function Strafewafel() {
         el.addEventListener("touchmove", pressMove);
         el.addEventListener("touchend", pressUp);
         el.addEventListener("touchcancel", pressUp);
-        // try to get mouse look too on desktop
+        // try to get pointer lock on desktop
         document.addEventListener("pointerlockchange", handlePointerLockChange);
         el.addEventListener("mousedown", (ev) => {
+            // clicking on controls doesn't trigger pointer-lock mode
             if (getControlParent(ev.target)) {
                 return;
-            } else {
-                console.log("allowing pointer lock since", uiState.screen.pressed, ev);
             }
             if (!document.pointerLockElement && el.requestPointerLock)
             {
@@ -437,7 +446,6 @@ function Strafewafel() {
 
     function getControlParent(el)
     {
-        // ugh this shouldn't be needed, there's probably some other property on the touch that has it
         while (el && !el.classList.contains("swfl-leftControl") && !el.classList.contains("swfl-rightControl"))
         {
             el = el.parentElement;
@@ -454,7 +462,7 @@ function Strafewafel() {
             let id = touch.identifier ? touch.identifier : "mouse";
             let target = touch.target ? getControlParent(touch.target) : this;
             if (target.classList.contains("swfl-leftControl")) action = "move";
-            if (target.classList.contains("swfl-rightControl")) action = "look";
+            if (target.classList.contains("swfl-rightControl")) action = "view";
 
             const rect = target.getBoundingClientRect();
       
@@ -520,7 +528,7 @@ function Strafewafel() {
                 ctrlX = -ev.movementY / deltaT_s * config.pointerLockedRadiansPerPixel;
             }
 
-            const action = "look";
+            const action = "view";
             const rect = this.getBoundingClientRect();
             uiState.screen.pressed["pointerlock"] = { index: uiState.total, position: { ctrlX, ctrlY }, rect, action, timestamp_ms };
             uiState.total++;
@@ -554,6 +562,7 @@ function Strafewafel() {
         util,
         step,
         state,
+        uiState,
         config,
         addDefaultEventListeners,
         addDefaultControlElements,

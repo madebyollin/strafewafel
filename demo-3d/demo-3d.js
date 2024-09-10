@@ -357,7 +357,7 @@ function main() {
         if (pos.x > 5.0 - margin  || pos.x < -5.0 + margin) return true;
         if (pos.x < 3.0 + margin)
         {
-            return Math.abs(pos.y) % 10 > 4.5 - margin && Math.abs(pos.y) % 10 < 6.5 + margin;
+            return Math.abs(pos.y) % 10 > 4.5 - margin && Math.abs(pos.y) % 10 < 5.5 + margin;
         }
         return false;
     }
