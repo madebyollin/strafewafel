@@ -30,7 +30,14 @@ function StrafewafelCore() {
         clamp: (x, a, b) => Math.min(b, Math.max(a, x)),
         snapToZero: (x, eps) => (Math.abs(x) > eps ? x : 0),
         // rotate a canonical 2d vector to a yawed vector
-        applyYaw: (xy, yaw) => { return {x: xy.x * Math.cos(yaw) - xy.y * Math.sin(yaw), y: xy.x * Math.sin(yaw) + xy.y * Math.cos(yaw) }; }
+        applyYaw: (xy, yaw) => { return {x: xy.x * Math.cos(yaw) - xy.y * Math.sin(yaw), y: xy.x * Math.sin(yaw) + xy.y * Math.cos(yaw) }; },
+        // return the scaler that would make vector's l2 norm match its current largest single-axis norm
+        clampDiagonalMotion: (x, y) => {
+            const mn = Math.max(Math.abs(x), Math.abs(y));
+            const n = Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2));
+            if (n == 0.0) return 1.0;
+            return mn / n;
+        }
     };
 
     function Config() {
@@ -225,6 +232,10 @@ function StrafewafelCore() {
         if (activeViewYKey == "j") { targetAngularVelocity_rps.yaw = config.viewSpeed_rps }
         if (activeViewYKey == "l") { targetAngularVelocity_rps.yaw = -config.viewSpeed_rps }
 
+        const viewRescale = util.clampDiagonalMotion(targetAngularVelocity_rps.pitch, targetAngularVelocity_rps.yaw)
+        targetAngularVelocity_rps.pitch *= viewRescale;
+        targetAngularVelocity_rps.yaw *= viewRescale;
+
         // check for touch override of the keyboard
         const activeScreenViewKey = findActiveInputAction(uiState.screen, config, "view");
         if (uiState.screen.pressed[activeScreenViewKey] &&
@@ -293,20 +304,10 @@ function StrafewafelCore() {
         if (activeMoveYKey == "a") { targetVelocity_mps.y = moveSpeedForKey(activeMoveYKey) }
         if (activeMoveYKey == "d") { targetVelocity_mps.y = -moveSpeedForKey(activeMoveYKey) }
 
+        const moveRescale = util.clampDiagonalMotion(targetVelocity_mps.x, targetVelocity_mps.y);
+        targetVelocity_mps.x *= moveRescale;
+        targetVelocity_mps.y *= moveRescale;
         targetVelocity_mps = util.applyYaw(targetVelocity_mps, view_r.yaw);
-
-        //let targetSpeed_mps = 0.0;
-        //const activePositionKey = findActiveInputAction(uiState.keyboard, config, "move");
-        //if (activePositionKey)
-        //{
-        //    targetSpeed_mps = uiState.keyboard.pressed[activePositionKey].shift ? config.runSpeed_mps : config.walkSpeed_mps;
-        //}
-        //
-        //let targetVelocity_mps = { x: 0.0, y: 0.0 };
-        //if (activePositionKey == "w") { targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, view_r.yaw); }
-        //if (activePositionKey == "a") { targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, view_r.yaw); }
-        //if (activePositionKey == "s") { targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, view_r.yaw); }
-        //if (activePositionKey == "d") { targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, view_r.yaw); }
 
         // check for touch override of the keyboard
         const activeScreenPositionKey = findActiveInputAction(uiState.screen, config, "move");
