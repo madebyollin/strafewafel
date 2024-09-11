@@ -1,0 +1,190 @@
+<html>
+    <!-- visualizer for keydown/keyup events so I can figure out the whole shift key situation -->
+    <head>
+        <title>JavaScript keyboard event tester</title>
+        <style>
+body {
+    padding: 32px;
+    font-family: monospace;
+    font-size: 16px;
+    white-space: pre;
+    color: #202020;
+}
+#EV-history {
+    opacity: 0.5;
+}
+p {
+    margin: 0;
+}
+.true {
+    color: deeppink;
+    font-weight: bold;
+}
+.false {
+    color: slategrey;
+}
+.enum {
+    color: coral;
+}
+.operator {
+    color: red;
+}
+.punctuation {
+    color: #404040;
+}
+.string {
+    font-weight: bold;
+    color: darkblue;
+    user-select: all;
+    -webkit-user-select: all;
+}
+.number {
+    font-weight: bold;
+    color: royalblue;
+}
+.function {
+    color: blueviolet;
+}
+.comment {
+    color: slategrey;
+}
+.prefix {
+    color: lightslategrey;
+}
+.key {
+    display: inline-block;
+    width: 7em;
+}
+.value {
+    display: inline-block;
+    width: 10em;
+}
+
+        </style>
+        <script>
+            // silly hacks lol
+            function fauxSyntaxHighlightToken(tok, c) {
+                if (["true", "false"].includes(tok)) {
+                    return `<span class='${tok}'>${tok}</span>`;
+                } else if (c == '(') {
+                    return `<span class='function'>${tok}</span>`;
+                } else {
+                    return tok;
+                }
+            }
+
+            function fauxSyntaxHighlightLine(s) {
+                let out = "";
+                let comment = false;
+                let str = false;
+                let tok = "";
+                for (let c of s) {
+                    if (comment) {
+                        out += c;
+                        continue;
+                    }
+                    if ("/qwertyuiopasdfghjklzxcvbnm_".indexOf(c.toLowerCase()) >= 0) {
+                        tok += c;
+                        continue;
+                    }
+                    if (tok.length > 0) {
+                        if (c == ":") {
+                            out += "<span class='key'>";
+                        }
+                        if (tok == "//") {
+                            out += "<span class='comment'><span class='prefix'>//</span>";
+                            comment = true;
+                        } else {
+                            out += fauxSyntaxHighlightToken(tok, c);
+                        }
+                        tok = "";
+                    }
+                    if ("+-*=".indexOf(c) >= 0) {
+                        out += `<span class='operator'>${c}</span>`;
+                    } else if (`""''`.indexOf(c) >= 0) {
+                        str = !str;
+                        if (str) {
+                            out += `<span class='string'>${c}`;
+                        } else {
+                            out += `${c}</span>`;
+                        }
+                    } else if ("[](){},:".indexOf(c) >= 0) {
+                        out += `<span class='punctuation'>${c}</span>`;
+                        if (c == ":") {
+                            out += "</span><span class='value'>";
+                        } else if (c == ",") {
+                            out += "</span>";
+                        }
+                    } else if ("1234567890".indexOf(c) >= 0) {
+                        out += `<span class='number'>${c}</span>`;
+                    } else {
+                        out += c;
+                    }
+                }
+                out += fauxSyntaxHighlightToken(tok, null);
+                if (comment) out += "</span>";
+                return out;
+            }
+
+            function fauxSyntaxHighlight(x) {
+                let n = x.length - x.trimStart(" ").length - 1;
+                return x.split("\n").map(x=>x.slice(n)).map(fauxSyntaxHighlightLine).join("<br />");
+            }
+
+            function escape(x) {
+                return x.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+            }
+
+            function main() {
+                const locations = ["DOM_KEY_LOCATION_STANDARD", "DOM_KEY_LOCATION_LEFT", "DOM_KEY_LOCATION_RIGHT", "DOM_KEY_LOCATION_NUMPAD", "DOM_KEY_LOCATION_MOBILE", "DOM_KEY_LOCATION_JOYSTICK"];
+
+                let EV = document.querySelector("#EV");
+                const T_START = Date.now();
+                for (let evType of ["keydown", "keyup"]) {
+                    window.addEventListener(evType, (ev) => {
+                        // copy the old event to history log
+                        if (EV.textContent.indexOf("Press any") < 0)
+                        {
+                            let historyEntry = document.createElement("div");
+                            historyEntry.innerHTML = EV.innerHTML;
+                            document.querySelector("#EV-history").prepend(historyEntry);
+                        }
+
+                        // render the new event in the main area
+                        EV.class = evType;
+                        EV.innerHTML = fauxSyntaxHighlight(`
+                    // T = ${(Date.now() - T_START)/1000.0} seconds
+                    ${evType}({
+                        // key
+                        key: "KEY", // the key typed
+                        code: "CODE", // the physical key used to type it
+                        location: ${ev.location}, // the physical key's location (${locations[ev.location]})
+
+                        // modifiers
+                        altKey: ${ev.altKey}, // whether alt was active
+                        ctrlKey: ${ev.ctrlKey}, // whether ctrl was active
+                        metaKey: ${ev.metaKey}, // whether meta (command) was active
+                        shiftKey: ${ev.shiftKey}, // whether shift was active
+
+                        // source
+                        repeat: ${ev.repeat}, // whether key is automatically repeating
+                        isComposing: ${ev.isComposing}, // whether IME was active
+                    });
+                    `).replace("KEY", escape(ev.key)).replace("CODE", escape(ev.code)).replace(`"&quot;"`, "`&quot;`");
+                    });
+                }
+            }
+            window.addEventListener("load", main);
+        </script>
+    </head>
+    <body>
+        <p class=comment>// JavaScript keyboard event tester</p>
+        <p class=comment>// Events are listed newest -> oldest</p>
+        <div id="EV">
+            <p>Press any key...</p>
+        </div>
+        <div id="EV-history">
+        </div>
+        <p class=comment>// <a href="https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent">docs</a></p>
+    </body>
+</html>
