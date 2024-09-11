@@ -368,28 +368,21 @@ function Strafewafel() {
         );
     }
 
-    function keyDown(key) {
-        // need to keep these sorted by order to have nice multi-key support
-        if (key == "Shift") {
-            for (let key in uiState.keyboard.pressed)
-            {
-                if (!uiState.keyboard.pressed[key].shift)
-                {
-                    uiState.keyboard.pressed[key].shift = true;
-                }
-            }
-        }
+    function keyDown(key, shiftPressed) {
         let action = null;
         if (["w", "a", "s", "d"].includes(key.toLowerCase())) action = "move";
         if (["i", "j", "k", "l"].includes(key.toLowerCase())) action = "view";
-        const shift = key == key.toUpperCase() || uiState.keyboard.pressed.shift;
-        uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: shift, action };
-        uiState.total++;
+        if (action) {
+            const shift = key == key.toUpperCase() || shiftPressed;
+            uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: shift, action };
+            // need to keep these sorted by order to have nice multi-key support
+            uiState.total++;
+        }
     }
 
     function keyUp(key) {
-        if (key == "Shift" || /^[A-Z]$/.test(key)) {
-            // keyup for any shifted key means no more shifted keys
+        if (key == "Shift") {
+            // keyup for shift key means no more shifted keys
             for (let key in uiState.keyboard.pressed)
             {
                 if (uiState.keyboard.pressed[key].shift)
@@ -418,7 +411,7 @@ function Strafewafel() {
 
     function addDefaultEventListeners(el) {
         el.addEventListener("keydown", (ev) => {
-            keyDown(ev.key);
+            keyDown(ev.key, ev.shiftKey);
         });
         el.addEventListener("keyup", (ev) => {
             keyUp(ev.key);
