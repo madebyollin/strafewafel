@@ -212,21 +212,23 @@ function StrafewafelCore() {
         // Update viewing state. Do this first because the viewing state affects
         // the coordinate frame for movement controls
         // ---------------------------------------------------------------------
-        const activeViewKey = findActiveInputAction(uiState.keyboard, config, "view");
-        let targetSpeed_rps = 0.0;
-        if (activeViewKey) {
-            targetSpeed_rps = config.viewSpeed_rps;
-        }
         let targetAngularVelocity_rps = { pitch: 0.0, yaw: 0.0 };
-        if (activeViewKey == "i") { targetAngularVelocity_rps = {pitch: targetSpeed_rps, yaw: 0.0}; }
-        if (activeViewKey == "j") { targetAngularVelocity_rps = {pitch: 0.0, yaw: targetSpeed_rps}; }
-        if (activeViewKey == "k") { targetAngularVelocity_rps = {pitch: -targetSpeed_rps, yaw: 0.0}; }
-        if (activeViewKey == "l") { targetAngularVelocity_rps = {pitch: 0.0, yaw: -targetSpeed_rps}; }
+        let activeViewIndex = 0;
+        // check axes separately to allow diagonal motion
+        const activeViewPKey = findActiveInputAction(uiState.keyboard, config, "viewP");
+        if (activeViewPKey) activeViewIndex = uiState.keyboard.pressed[activeViewPKey].index;
+        if (activeViewPKey == "i") { targetAngularVelocity_rps.pitch = config.viewSpeed_rps }
+        if (activeViewPKey == "k") { targetAngularVelocity_rps.pitch = -config.viewSpeed_rps }
+
+        const activeViewYKey = findActiveInputAction(uiState.keyboard, config, "viewY");
+        if (activeViewYKey) activeViewIndex = uiState.keyboard.pressed[activeViewYKey].index;
+        if (activeViewYKey == "j") { targetAngularVelocity_rps.yaw = config.viewSpeed_rps }
+        if (activeViewYKey == "l") { targetAngularVelocity_rps.yaw = -config.viewSpeed_rps }
 
         // check for touch override of the keyboard
         const activeScreenViewKey = findActiveInputAction(uiState.screen, config, "view");
         if (uiState.screen.pressed[activeScreenViewKey] &&
-            (!activeViewKey || uiState.screen.pressed[activeScreenViewKey].index > uiState.keyboard.pressed[activeViewKey].index))
+            (!(activeViewPKey || activeViewYKey) || uiState.screen.pressed[activeScreenViewKey].index > activeViewIndex))
         {
             const press = uiState.screen.pressed[activeScreenViewKey];
             targetAngularVelocity_rps = {
@@ -249,10 +251,8 @@ function StrafewafelCore() {
         };
 
         // additional cooldown so that things come smoothly to rest when you let go of the key
-        if (!activeViewKey) {
-            viewAcceleration_rps2.pitch *= config.pitchCooldownFactor;
-            viewAcceleration_rps2.yaw *= config.yawCooldownFactor;
-        }
+        if (!activeViewPKey) { viewAcceleration_rps2.pitch *= config.pitchCooldownFactor; }
+        if (!activeViewYKey) { viewAcceleration_rps2.yaw *= config.yawCooldownFactor; }
 
         // smoothed and clamped version
         const viewVelocity_rps = {
@@ -276,23 +276,42 @@ function StrafewafelCore() {
         // Update movement state. Do this second because the viewing state affects
         // the coordinate frame for movement controls.
         // ---------------------------------------------------------------------
-        let targetSpeed_mps = 0.0;
-        const activePositionKey = findActiveInputAction(uiState.keyboard, config, "move");
-        if (activePositionKey)
-        {
-            targetSpeed_mps = uiState.keyboard.pressed[activePositionKey].shift ? config.runSpeed_mps : config.walkSpeed_mps;
-        }
 
+        function moveSpeedForKey(key) {
+            return uiState.keyboard.pressed[key].shift ? config.runSpeed_mps : config.walkSpeed_mps;
+        }
         let targetVelocity_mps = { x: 0.0, y: 0.0 };
-        if (activePositionKey == "w") { targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, view_r.yaw); }
-        if (activePositionKey == "a") { targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, view_r.yaw); }
-        if (activePositionKey == "s") { targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, view_r.yaw); }
-        if (activePositionKey == "d") { targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, view_r.yaw); }
+        let activeMoveIndex = 0;
+        // check axes separately to allow diagonal motion
+        const activeMoveXKey = findActiveInputAction(uiState.keyboard, config, "moveX");
+        if (activeMoveXKey) activeMoveIndex = uiState.keyboard.pressed[activeMoveXKey].index;
+        if (activeMoveXKey == "w") { targetVelocity_mps.x = moveSpeedForKey(activeMoveXKey) }
+        if (activeMoveXKey == "s") { targetVelocity_mps.x = -moveSpeedForKey(activeMoveXKey) }
+
+        const activeMoveYKey = findActiveInputAction(uiState.keyboard, config, "moveY");
+        if (activeMoveYKey) activeMoveIndex = uiState.keyboard.pressed[activeMoveYKey].index;
+        if (activeMoveYKey == "a") { targetVelocity_mps.y = moveSpeedForKey(activeMoveYKey) }
+        if (activeMoveYKey == "d") { targetVelocity_mps.y = -moveSpeedForKey(activeMoveYKey) }
+
+        targetVelocity_mps = util.applyYaw(targetVelocity_mps, view_r.yaw);
+
+        //let targetSpeed_mps = 0.0;
+        //const activePositionKey = findActiveInputAction(uiState.keyboard, config, "move");
+        //if (activePositionKey)
+        //{
+        //    targetSpeed_mps = uiState.keyboard.pressed[activePositionKey].shift ? config.runSpeed_mps : config.walkSpeed_mps;
+        //}
+        //
+        //let targetVelocity_mps = { x: 0.0, y: 0.0 };
+        //if (activePositionKey == "w") { targetVelocity_mps = util.applyYaw({x: targetSpeed_mps, y: 0.0}, view_r.yaw); }
+        //if (activePositionKey == "a") { targetVelocity_mps = util.applyYaw({x: 0.0, y: targetSpeed_mps}, view_r.yaw); }
+        //if (activePositionKey == "s") { targetVelocity_mps = util.applyYaw({x: -targetSpeed_mps, y: 0.0}, view_r.yaw); }
+        //if (activePositionKey == "d") { targetVelocity_mps = util.applyYaw({x: 0.0, y: -targetSpeed_mps}, view_r.yaw); }
 
         // check for touch override of the keyboard
         const activeScreenPositionKey = findActiveInputAction(uiState.screen, config, "move");
         if (activeScreenPositionKey &&
-            (!activePositionKey || uiState.screen.pressed[activeScreenPositionKey].index > uiState.keyboard.pressed[activePositionKey].index))
+            (!(activeMoveXKey || activeMoveYKey) || uiState.screen.pressed[activeScreenPositionKey].index > activeMoveIndex))
         {
             const press = uiState.screen.pressed[activeScreenPositionKey];
             targetVelocity_mps = util.applyYaw({x: press.position.ctrlX * config.runSpeed_mps, y: press.position.ctrlY * config.runSpeed_mps}, view_r.yaw);
@@ -304,8 +323,10 @@ function StrafewafelCore() {
         };
 
         // additional cooldown so that things come smoothly to rest when you let go of the key
-        if (activePositionKey == null) {
+        if (activeMoveXKey == null) {
             acceleration_mps2.x *= 0.5;
+        }
+        if (activeMoveYKey == null) {
             acceleration_mps2.y *= 0.5;
         }
 
@@ -370,8 +391,23 @@ function Strafewafel() {
 
     function keyDown(key, shiftPressed) {
         let action = null;
-        if (["w", "a", "s", "d"].includes(key.toLowerCase())) action = "move";
-        if (["i", "j", "k", "l"].includes(key.toLowerCase())) action = "view";
+        if (key == "Shift") {
+            // keydown for shift key means all pressed keys become shifted;
+            // this is important if the user e.g. presses w, mashes
+            // a and d so that the w repeat events stop firing,
+            // and then presses shift to start sprinting
+            for (let key in uiState.keyboard.pressed)
+            {
+                if (!uiState.keyboard.pressed[key].shift)
+                {
+                    uiState.keyboard.pressed[key].shift = true;
+                }
+            }
+        }
+        if (["w", "s"].includes(key.toLowerCase())) action = "moveX";
+        if (["a", "d"].includes(key.toLowerCase())) action = "moveY";
+        if (["i", "k"].includes(key.toLowerCase())) action = "viewP";
+        if (["j", "l"].includes(key.toLowerCase())) action = "viewY";
         if (action) {
             const shift = key == key.toUpperCase() || shiftPressed;
             uiState.keyboard.pressed[key.toLowerCase()] = { index: uiState.total, shift: shift, action };
