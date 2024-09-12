@@ -32,12 +32,14 @@ function StrafewafelCore() {
         // rotate a canonical 2d vector to a yawed vector
         applyYaw: (xy, yaw) => { return {x: xy.x * Math.cos(yaw) - xy.y * Math.sin(yaw), y: xy.x * Math.sin(yaw) + xy.y * Math.cos(yaw) }; },
         // return the scaler that would make vector's l2 norm match its current largest single-axis norm
-        clampDiagonalMotion: (x, y) => {
+        clampDiagonalMotion: (x, y, eps) => {
             const mn = Math.max(Math.abs(x), Math.abs(y));
             const n = Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2));
-            if (n == 0.0) return 1.0;
+            if (n < eps) return 1.0;
             return mn / n;
-        }
+        },
+        // wrap angles to avoid getting too far from origin
+        wrapAngle: x => x % (2 * Math.PI)
     };
 
     function Config() {
@@ -185,7 +187,6 @@ function StrafewafelCore() {
     }
 
     // this function searches the UI State and finds the relevant input
-    // also TODO: seems like a lot of people probably want diagonal motion in multikey instead of the most-recent-key thing we use for 2d?
     function findActiveInputAction(_inputs, _config, _action) {
         const [inputs, config, action] = [_inputs, _config, _action]; // no touchy
         let activeIndex = 0;
@@ -232,7 +233,7 @@ function StrafewafelCore() {
         if (activeViewYKey == "j") { targetAngularVelocity_rps.yaw = config.viewSpeed_rps }
         if (activeViewYKey == "l") { targetAngularVelocity_rps.yaw = -config.viewSpeed_rps }
 
-        const viewRescale = util.clampDiagonalMotion(targetAngularVelocity_rps.pitch, targetAngularVelocity_rps.yaw)
+        const viewRescale = util.clampDiagonalMotion(targetAngularVelocity_rps.pitch, targetAngularVelocity_rps.yaw, config.eps)
         targetAngularVelocity_rps.pitch *= viewRescale;
         targetAngularVelocity_rps.yaw *= viewRescale;
 
@@ -280,7 +281,7 @@ function StrafewafelCore() {
 
         const view_r = {
             pitch: util.clamp(state.view_r.pitch + state.viewVelocity_rps.pitch * dt_s, -config.maxPitch_r, config.maxPitch_r),
-            yaw: state.view_r.yaw + state.viewVelocity_rps.yaw * dt_s
+            yaw: util.wrapAngle(state.view_r.yaw + state.viewVelocity_rps.yaw * dt_s)
         };
 
         // ---------------------------------------------------------------------
@@ -304,7 +305,7 @@ function StrafewafelCore() {
         if (activeMoveYKey == "a") { targetVelocity_mps.y = moveSpeedForKey(activeMoveYKey) }
         if (activeMoveYKey == "d") { targetVelocity_mps.y = -moveSpeedForKey(activeMoveYKey) }
 
-        const moveRescale = util.clampDiagonalMotion(targetVelocity_mps.x, targetVelocity_mps.y);
+        const moveRescale = util.clampDiagonalMotion(targetVelocity_mps.x, targetVelocity_mps.y, config.eps);
         targetVelocity_mps.x *= moveRescale;
         targetVelocity_mps.y *= moveRescale;
         targetVelocity_mps = util.applyYaw(targetVelocity_mps, view_r.yaw);
