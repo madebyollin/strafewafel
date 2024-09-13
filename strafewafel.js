@@ -128,11 +128,23 @@ function StrafewafelCore() {
             .swfl-control.locked { opacity:0.0; }
             .swfl-controlSocket {
                 position: absolute; left: 25%; top: 25%; width:50%; height:50%;
-                background: rgba(64 64 64 / 0.5); -webkit-backdrop-filter: blur(16px) saturate(200%); border-radius:50%;
+            }
+            .swfl-controlSocketDisc {
+                position: absolute; left: 25%; top: 25%; width:50%; height:50%;
+                background: rgba(64, 64, 64, 0.5); border-radius:50%;
+                -webkit-backdrop-filter: blur(8px) saturate(200%);
+                backdrop-filter: blur(8px) saturate(200%);
             }
             .swfl-controlStick {
                 position: absolute; left: 50%; top: 50%; width:75%; height:75%; transform: translateX(-50%) translateY(-50%);
-                background: rgba(255,255,255,0.5); -webkit-backdrop-filter: blur(8px) saturate(200%); border-radius:75%;
+                background: rgba(255,255,255,0.5); border-radius:75%;
+                transition: 0.2s ease background-color;
+                -webkit-backdrop-filter: blur(8px) saturate(200%);
+                backdrop-filter: blur(8px) saturate(200%);
+                z-index: 2;
+            }
+            .swfl-controlStick.pressed {
+                background: rgba(255,255,255,0.6);
             }
             .swfl-leftControl { left: 0; }
             .swfl-rightControl { right: 0; }
@@ -148,6 +160,9 @@ function StrafewafelCore() {
         const leftControlSocket = document.createElement("div");
         leftControlSocket.classList.add("swfl-controlSocket");
         leftControlEl.appendChild(leftControlSocket);
+        const leftControlSocketDisc = document.createElement("div");
+        leftControlSocketDisc.classList.add("swfl-controlSocketDisc");
+        leftControlEl.appendChild(leftControlSocketDisc);
         const leftControlStick = document.createElement("div");
         leftControlStick.classList.add("swfl-controlStick");
         leftControlSocket.appendChild(leftControlStick);
@@ -157,6 +172,9 @@ function StrafewafelCore() {
         const rightControlSocket = document.createElement("div");
         rightControlSocket.classList.add("swfl-controlSocket");
         rightControlEl.appendChild(rightControlSocket);
+        const rightControlSocketDisc = document.createElement("div");
+        rightControlSocketDisc.classList.add("swfl-controlSocketDisc");
+        rightControlEl.appendChild(rightControlSocketDisc);
         const rightControlStick = document.createElement("div");
         rightControlStick.classList.add("swfl-controlStick");
         rightControlSocket.appendChild(rightControlStick);
@@ -174,9 +192,22 @@ function StrafewafelCore() {
         const maxShift = 0.25;
         ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
         ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
+        if (findActiveInputAction(uiState.keyboard, config, "moveX") || findActiveInputAction(uiState.keyboard, config, "moveY") || findActiveInputAction(uiState.screen, config, "move"))
+        {
+            ui.leftControlStick.classList.add("pressed");
+        } else {
+            ui.leftControlStick.classList.remove("pressed");
+        }
 
         ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
         ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+
+        if (findActiveInputAction(uiState.keyboard, config, "viewP") || findActiveInputAction(uiState.keyboard, config, "viewY") || findActiveInputAction(uiState.screen, config, "view"))
+        {
+            ui.rightControlStick.classList.add("pressed");
+        } else {
+            ui.rightControlStick.classList.remove("pressed");
+        }
 
         if (uiState.screen.pointerLocked)
         {
