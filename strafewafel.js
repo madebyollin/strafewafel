@@ -48,6 +48,8 @@ function StrafewafelCore() {
             maxMoveSpeed_mps: 7,
             runSpeed_mps: 7,
             walkSpeed_mps: 3.5,
+            // how much does walking backwards slow you down?
+            backwardsSpeedMultiple: 0.75,
 
             // what's the min / max xy acceleration we'll allow?
             maxAccelerationXY_mps2: 75,
@@ -298,7 +300,7 @@ function StrafewafelCore() {
         const activeMoveXKey = findActiveInputAction(uiState.keyboard, config, "moveX");
         if (activeMoveXKey) activeMoveIndex = uiState.keyboard.pressed[activeMoveXKey].index;
         if (activeMoveXKey == "w") { targetVelocity_mps.x = moveSpeedForKey(activeMoveXKey) }
-        if (activeMoveXKey == "s") { targetVelocity_mps.x = -moveSpeedForKey(activeMoveXKey) }
+        if (activeMoveXKey == "s") { targetVelocity_mps.x = -moveSpeedForKey(activeMoveXKey) * config.backwardsSpeedMultiple }
 
         const activeMoveYKey = findActiveInputAction(uiState.keyboard, config, "moveY");
         if (activeMoveYKey) activeMoveIndex = uiState.keyboard.pressed[activeMoveYKey].index;
@@ -554,7 +556,9 @@ function Strafewafel() {
             if (uiState.screen.pressed["pointerlock"])
             {
                 const prevTimestamp_ms = uiState.screen.pressed["pointerlock"].timestamp_ms;
-                const deltaT_s = (timestamp_ms - prevTimestamp_ms) / 1000.0;
+                // browser sometimes gives multiple move events per ms (impressive!)
+                // so we add 1 here as a lazy hack to avoid NaNs when computing the move rate
+                const deltaT_s = (1 + timestamp_ms - prevTimestamp_ms) / 1000.0;
                 ctrlY = -ev.movementX / deltaT_s * config.pointerLockedRadiansPerPixel;
                 ctrlX = -ev.movementY / deltaT_s * config.pointerLockedRadiansPerPixel;
             }
