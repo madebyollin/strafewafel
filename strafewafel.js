@@ -186,12 +186,22 @@ function StrafewafelCore() {
         };
     };
 
+    function makeDisplacedControlStickTransform(config, vec) {
+        const squaredNorm = Math.pow(vec.x, 2) + Math.pow(vec.y, 2);
+        const angle_rad = squaredNorm > config.eps ? Math.atan2(vec.x, vec.y) : 0.0;
+        return `translateX(-50%) translateY(-50%) rotate(${angle_rad}rad) scaleX(${1.0 - 0.1 * squaredNorm}) scaleY(${1.0 - 0.025 * squaredNorm})`;
+    }
+
     function renderStateToUI(_state, _config, _uiState, ui) {
         const [state, config, uiState] = [_state, _config, _uiState]; // no touchy
         const canonicalVelocity_mps = util.applyYaw(state.velocity_mps, -state.view_r.yaw);
         const maxShift = 0.25;
         ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
         ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.transform = makeDisplacedControlStickTransform(config, {
+            x:canonicalVelocity_mps.x / config.maxMoveSpeed_mps,
+            y:canonicalVelocity_mps.y / config.maxMoveSpeed_mps
+        });
         if (findActiveInputAction(uiState.keyboard, config, "moveX") || findActiveInputAction(uiState.keyboard, config, "moveY") || findActiveInputAction(uiState.screen, config, "move"))
         {
             ui.leftControlStick.classList.add("pressed");
@@ -201,6 +211,10 @@ function StrafewafelCore() {
 
         ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
         ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+        ui.rightControlStick.style.transform = makeDisplacedControlStickTransform(config, {
+            x:state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps,
+            y:state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps
+        });
 
         if (findActiveInputAction(uiState.keyboard, config, "viewP") || findActiveInputAction(uiState.keyboard, config, "viewY") || findActiveInputAction(uiState.screen, config, "view"))
         {
