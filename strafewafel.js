@@ -266,11 +266,11 @@ function StrafewafelCore() {
         const [state, config, uiState] = [_state, _config, _uiState]; // no touchy
         const playerLocalVelocity_mps = state.playerLocalVelocity_mps;
         const maxShift = 0.25;
-        ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
-        ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.left / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.forward / config.maxMoveSpeed_mps)}%`;
         ui.leftControlStick.style.transform = makeDisplacedControlStickTransform(config, {
-            x:playerLocalVelocity_mps.x / config.maxMoveSpeed_mps,
-            y:playerLocalVelocity_mps.y / config.maxMoveSpeed_mps
+            x:playerLocalVelocity_mps.forward / config.maxMoveSpeed_mps,
+            y:playerLocalVelocity_mps.left / config.maxMoveSpeed_mps
         });
         if (findActiveInputAction(uiState.keyboard, config, "moveX") || findActiveInputAction(uiState.keyboard, config, "moveY") || findActiveInputAction(uiState.screen, config, "move"))
         {
