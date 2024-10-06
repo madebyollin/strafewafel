@@ -244,9 +244,9 @@ void main() {
     vec3 rayDirection = computeRayDirection(2.0 * st.x/width - 1.0, 2.0 * st.y / height - 1.0, width/height, 75.0);
     // rotate by pitch
     rayDirection = vec3(
-        rayDirection.x * cos(pitch)  - rayDirection.z * sin(pitch),
+        rayDirection.x * cos(-pitch) - rayDirection.z * sin(-pitch),
         rayDirection.y,
-        rayDirection.x * sin(pitch) + rayDirection.z * cos(pitch)
+        rayDirection.x * sin(-pitch) + rayDirection.z * cos(-pitch)
     );
     // rotate by yaw
     rayDirection = vec3(

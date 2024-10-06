@@ -16,9 +16,45 @@
 //
 //
 // Coordinates and conventions:
-//   The strafewafel coordinate system is +x forward, +y left, +z up.
-//     This means that screen-space bird's-eye-view coordinates are (-y, -x)
 //   The strafewafel units are meters, radians, and seconds.
+//   The strafewafel internal position/velocity is tracked in a fixed, global gravity-aligned coordinate frame.
+//     For player-local (forward / left) motion you should access state.playerLocalVelocity_mps.
+//   The strafewafel internal yaw is global, but the internal pitch is relative to the player's local axis.
+//     This means that the tracked pitch stays constant even if you yaw in a circle.
+//     TODO: does this approach even make sense? and what about roll? will we ever have roll?
+//   The strafewafel internal coordinate convention is +x forward, +y left, +z up.
+//     This means that screen-space bird's-eye-view coordinates are (-y, -x)
+//     The initial player-local coordinate frame is aligned to the global coordinate frame.
+//
+//     +-------------------------------------------------+
+//     |                                                 |
+//     |                                 yaw             |
+//     |                             .---------.         |
+//     |                           ,'           `.       |
+//     |                           v      z       )      |
+//     |                                  ^      /       |
+//     |                                  |    ,'        |
+//     |                     roll      -------'          |
+//     |                    .-----.       |              |
+//     |                  ,'       `.     |              |
+//     |                 ;           v    |              |
+//     |                 :     x          |              |
+//     |                  \     ^         |              |
+//     |                   `.    \        |              |
+//     |                     `    \       |              |
+//     |                           \      |              |
+//     |                            \     |              |
+//     |       pitch                 \    |              |
+//     |       .---.                  \   |              |
+//     |      /     \                  \  |              |
+//     |      v      :                  \ |              |
+//     |             |                   \|              |
+//     |        y<-- | -------------------0              |
+//     |             ;                                   |
+//     |            /                                    |
+//     |       \   /                                     |
+//     |        `-'                                      |
+//     +-------------------------------------------------+
 //
 // Related work:
 //   Blender walk-mode controls: https://github.com/blender/blender/blob/2ddc574ad96607bc82960d66445a6bb5b4363874/source/blender/editors/space_view3d/view3d_navigate_walk.cc
@@ -39,7 +75,12 @@ function StrafewafelCore() {
             return mn / n;
         },
         // wrap angles to avoid getting too far from origin
-        wrapAngle: x => x % (2 * Math.PI)
+        wrapAngle: x => {
+            x = x % (2 * Math.PI);
+            if (x > Math.PI) x -= 2 * Math.PI;
+            if (x < -Math.PI) x += 2 * Math.PI;
+            return x;
+        }
     };
 
     function Config() {
@@ -85,16 +126,25 @@ function StrafewafelCore() {
             position_m: {
                 x: 0,
                 y: 0,
+                z: 0,
             },
             velocity_mps: {
                 x: 0,
                 y: 0,
+                z: 0,
+            },
+            playerLocalVelocity_mps: {
+                forward: 0,
+                left: 0,
+                up: 0,
             },
             view_r: {
+                roll: 0,
                 pitch: 0,
                 yaw: 0,
             },
             viewVelocity_rps: {
+                roll: 0,
                 pitch: 0,
                 yaw: 0,
             },
@@ -114,7 +164,10 @@ function StrafewafelCore() {
             screen: {
                 pointerLocked: false,
                 pressed: { }
-            }
+            },
+
+            // debug overlay
+            debugOverlayEnabled: false
         };
     }
 
@@ -148,6 +201,20 @@ function StrafewafelCore() {
             }
             .swfl-leftControl { left: 0; }
             .swfl-rightControl { right: 0; }
+            .swfl-debugOverlay {
+                position: absolute; top: 0px; left: 0px; white-space: pre; color: rgba(255, 255, 255, 0.5); background: rgba(0,0,0,0.75); padding: 8px;
+                -webkit-backdrop-filter: blur(8px) saturate(200%);
+                backdrop-filter: blur(8px) saturate(200%);
+                max-height: 75%; overflow-y: scroll;
+                font-family: monospace;
+            }
+            .swfl-debugOverlayValue {
+                color: white;
+                font-weight: bold;
+            }
+            .swfl-debugOverlayPunctuation {
+                color: rgba(255, 255, 255, 0.25);
+            }
         `;
         // style element
         const styleEl = document.createElement("style");
@@ -178,11 +245,14 @@ function StrafewafelCore() {
         const rightControlStick = document.createElement("div");
         rightControlStick.classList.add("swfl-controlStick");
         rightControlSocket.appendChild(rightControlStick);
+        const debugOverlayEl = document.createElement("div");
+        debugOverlayEl.classList.add("swfl-debugOverlay");
         return {
             styleEl,
             leftControlEl, rightControlEl,
             leftControlSocket, rightControlSocket,
-            leftControlStick, rightControlStick
+            leftControlStick, rightControlStick,
+            debugOverlayEl,
         };
     };
 
@@ -194,13 +264,13 @@ function StrafewafelCore() {
 
     function renderStateToUI(_state, _config, _uiState, ui) {
         const [state, config, uiState] = [_state, _config, _uiState]; // no touchy
-        const canonicalVelocity_mps = util.applyYaw(state.velocity_mps, -state.view_r.yaw);
+        const playerLocalVelocity_mps = state.playerLocalVelocity_mps;
         const maxShift = 0.25;
-        ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * canonicalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
-        ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * canonicalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.left = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.y / config.maxMoveSpeed_mps)}%`;
+        ui.leftControlStick.style.top = `${100 * (0.5 - maxShift * playerLocalVelocity_mps.x / config.maxMoveSpeed_mps)}%`;
         ui.leftControlStick.style.transform = makeDisplacedControlStickTransform(config, {
-            x:canonicalVelocity_mps.x / config.maxMoveSpeed_mps,
-            y:canonicalVelocity_mps.y / config.maxMoveSpeed_mps
+            x:playerLocalVelocity_mps.x / config.maxMoveSpeed_mps,
+            y:playerLocalVelocity_mps.y / config.maxMoveSpeed_mps
         });
         if (findActiveInputAction(uiState.keyboard, config, "moveX") || findActiveInputAction(uiState.keyboard, config, "moveY") || findActiveInputAction(uiState.screen, config, "move"))
         {
@@ -210,9 +280,9 @@ function StrafewafelCore() {
         }
 
         ui.rightControlStick.style.left = `${100 * (0.5 - maxShift * state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps)}%`;
-        ui.rightControlStick.style.top = `${100 * (0.5 - maxShift * state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
+        ui.rightControlStick.style.top = `${100 * (0.5 + maxShift * state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps)}%`;
         ui.rightControlStick.style.transform = makeDisplacedControlStickTransform(config, {
-            x:state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps,
+            x:-state.viewVelocity_rps.pitch / config.maxAngularVelocityPY_rps,
             y:state.viewVelocity_rps.yaw / config.maxAngularVelocityPY_rps
         });
 
@@ -230,6 +300,23 @@ function StrafewafelCore() {
         } else {
             ui.leftControlEl.classList.remove("locked");
             ui.rightControlEl.classList.remove("locked");
+        }
+
+        if (uiState.debugOverlayEnabled) {
+            ui.debugOverlayEl.style.display = "block";
+            function printDebugText(s, indent) {
+                const indentation = " ".repeat(indent);
+                if (typeof s === 'number') {
+                    return indentation + "<span class=swfl-debugOverlayValue>" + s.toFixed(4) + "</span>" + "\n";
+                }
+                if (typeof s === 'object') {
+                    return Array.from(Object.keys(s)).map(k => `${indentation}${k}<span class=swfl-debugOverlayPunctuation>:</span>\n${printDebugText(s[k], indent+1)}`).join("") + "\n";
+                }
+                return `${s}`
+            }
+            ui.debugOverlayEl.innerHTML = "<span style='opacity: 0.5;'>Debug info (toggle with `)</span><br/><br/>" + printDebugText({state}, 0);
+        } else {
+            ui.debugOverlayEl.style.display = "none";
         }
     }
 
@@ -267,13 +354,13 @@ function StrafewafelCore() {
         // Update viewing state. Do this first because the viewing state affects
         // the coordinate frame for movement controls
         // ---------------------------------------------------------------------
-        let targetAngularVelocity_rps = { pitch: 0.0, yaw: 0.0 };
+        let targetAngularVelocity_rps = { roll:0.0, pitch: 0.0, yaw: 0.0 };
         let activeViewIndex = 0;
         // check axes separately to allow diagonal motion
         const activeViewPKey = findActiveInputAction(uiState.keyboard, config, "viewP");
         if (activeViewPKey) activeViewIndex = uiState.keyboard.pressed[activeViewPKey].index;
-        if (activeViewPKey == "i") { targetAngularVelocity_rps.pitch = config.viewSpeed_rps }
-        if (activeViewPKey == "k") { targetAngularVelocity_rps.pitch = -config.viewSpeed_rps }
+        if (activeViewPKey == "i") { targetAngularVelocity_rps.pitch = -config.viewSpeed_rps }
+        if (activeViewPKey == "k") { targetAngularVelocity_rps.pitch = config.viewSpeed_rps }
 
         const activeViewYKey = findActiveInputAction(uiState.keyboard, config, "viewY");
         if (activeViewYKey) activeViewIndex = uiState.keyboard.pressed[activeViewYKey].index;
@@ -291,7 +378,8 @@ function StrafewafelCore() {
         {
             const press = uiState.screen.pressed[activeScreenViewKey];
             targetAngularVelocity_rps = {
-                pitch: press.position.ctrlX * config.viewSpeed_rps,
+                roll: 0.0,
+                pitch: -press.position.ctrlX * config.viewSpeed_rps,
                 yaw: press.position.ctrlY * config.viewSpeed_rps
             };
         }
@@ -305,6 +393,7 @@ function StrafewafelCore() {
         }
 
         const viewAcceleration_rps2 = {
+            roll: 0.0,
             pitch: util.clamp((targetAngularVelocity_rps.pitch - state.viewVelocity_rps.pitch) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
             yaw: util.clamp((targetAngularVelocity_rps.yaw - state.viewVelocity_rps.yaw) / Math.max(dt_s, config.eps), -config.maxAngularAccelerationPY_rps2, config.maxAngularAccelerationPY_rps2),
         };
@@ -315,6 +404,7 @@ function StrafewafelCore() {
 
         // smoothed and clamped version
         const viewVelocity_rps = {
+            roll: 0.0,
             pitch: util.clamp(util.snapToZero(state.viewVelocity_rps.pitch + viewAcceleration_rps2.pitch * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
             yaw: util.clamp(util.snapToZero(state.viewVelocity_rps.yaw + viewAcceleration_rps2.yaw * dt_s, config.eps), -config.maxAngularVelocityPY_rps, config.maxAngularVelocityPY_rps),
         };
@@ -322,11 +412,13 @@ function StrafewafelCore() {
         if (activeScreenViewKey == "pointerlock")
         {
             // direct override no smoothing
+            viewVelocity_rps.roll = 0.0;
             viewVelocity_rps.pitch = targetAngularVelocity_rps.pitch;
             viewVelocity_rps.yaw = targetAngularVelocity_rps.yaw;
         }
 
         const view_r = {
+            roll: 0.0,
             pitch: util.clamp(state.view_r.pitch + state.viewVelocity_rps.pitch * dt_s, -config.maxPitch_r, config.maxPitch_r),
             yaw: util.wrapAngle(state.view_r.yaw + state.viewVelocity_rps.yaw * dt_s)
         };
@@ -339,7 +431,7 @@ function StrafewafelCore() {
         function moveSpeedForKey(key) {
             return uiState.keyboard.pressed[key].shift ? config.runSpeed_mps : config.walkSpeed_mps;
         }
-        let targetVelocity_mps = { x: 0.0, y: 0.0 };
+        let targetVelocity_mps = { x: 0.0, y: 0.0, z: 0.0 };
         let activeMoveIndex = 0;
         // check axes separately to allow diagonal motion
         const activeMoveXKey = findActiveInputAction(uiState.keyboard, config, "moveX");
@@ -369,6 +461,7 @@ function StrafewafelCore() {
         const acceleration_mps2 = { 
             x: util.clamp((targetVelocity_mps.x - state.velocity_mps.x) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
             y: util.clamp((targetVelocity_mps.y - state.velocity_mps.y) / Math.max(dt_s, config.eps), -config.maxAccelerationXY_mps2, config.maxAccelerationXY_mps2),
+            z: 0.0,
         };
 
         // additional cooldown so that things come smoothly to rest when you let go of the key
@@ -382,17 +475,24 @@ function StrafewafelCore() {
         // the snap to zero here is kinda janky, it was needed to prevent weird floating point fluctuations when converging to stop
         const velocity_mps = {
             x: util.clamp(util.snapToZero(state.velocity_mps.x + acceleration_mps2.x * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps),
-            y: util.clamp(util.snapToZero(state.velocity_mps.y + acceleration_mps2.y * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps)
+            y: util.clamp(util.snapToZero(state.velocity_mps.y + acceleration_mps2.y * dt_s, config.eps), -config.maxMoveSpeed_mps, config.maxMoveSpeed_mps),
+            z: 0.0
         };
+
+        // precompute the local-coordinate (yawed) version so we have it available for all consumers
+        const playerLocalVelocityXYZ_mps = util.applyYaw(velocity_mps, -view_r.yaw);
+        const playerLocalVelocity_mps = { forward: playerLocalVelocityXYZ_mps.x, left: playerLocalVelocityXYZ_mps.y };
 
         const position_m = {
             x: state.position_m.x + velocity_mps.x * dt_s,
             y: state.position_m.y + velocity_mps.y * dt_s,
+            z: state.position_m.z
         };
 
         const outState = {
             position_m,
             velocity_mps,
+            playerLocalVelocity_mps,
             view_r,
             viewVelocity_rps,
         };
@@ -463,6 +563,8 @@ function Strafewafel() {
             // need to keep these sorted by order to have nice multi-key support
             uiState.total++;
         }
+        // debug overlay
+        if (["`"].includes(key.toLowerCase())) uiState.debugOverlayEnabled = !uiState.debugOverlayEnabled;
     }
 
     function keyUp(key) {
@@ -631,10 +733,16 @@ function Strafewafel() {
         el.appendChild(ui.styleEl);
         el.appendChild(ui.leftControlEl);
         el.appendChild(ui.rightControlEl);
+        el.appendChild(ui.rightControlEl);
+        el.appendChild(ui.debugOverlayEl);
     }
 
     function updateControlElements() {
         core.renderStateToUI(state, config, uiState, ui);
+    }
+
+    function resetPlayerState() {
+        Object.assign(state, core.State());
     }
 
     // public API
@@ -644,6 +752,7 @@ function Strafewafel() {
         state,
         uiState,
         config,
+        resetPlayerState,
         addDefaultEventListeners,
         addDefaultControlElements,
         updateControlElements,
